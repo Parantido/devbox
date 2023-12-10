@@ -1,0 +1,153 @@
+version: "3.3"
+
+networks:
+  proxy:
+  tracker:
+  code-space:
+
+services:
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy
+    container_name: oauth2-proxy
+    restart: always
+    networks:
+      - proxy
+    command:
+      - --http-address
+      - 0.0.0.0:4180
+      - --cookie-domain
+      - ${DOMAIN}
+      - --whitelist-domain=*.${DOMAIN}
+    environment:
+      - OAUTH2_PROXY_COOKIE_SECRET=fLIblJsthbMhgELnmpqrCbWQD9P1vyDfI5SAs8BUG6c=
+      - OAUTH2_PROXY_CLIENT_ID=
+      - OAUTH2_PROXY_CLIENT_SECRET=
+      - OAUTH2_PROXY_PROVIDER=github
+      - OAUTH2_PROXY_EMAIL_DOMAINS=*
+      - OAUTH2_PROXY_GITHUB_USER="Parantido"
+      - OAUTH2_PROXY_REDIRECT_URL=https://auth.${DOMAIN}/oauth2/callback
+      - OAUTH2_PROXY_HTTP_ADDRESS=0.0.0.0:4180
+      - OAUTH2_PROXY_COOKIE_DOMAINS=${DOMAIN}
+      - OAUTH2_PROXY_SESSION_STORE_TYPE=cookie
+      - OAUTH2_PROXY_COOKIE_SAMESITE=lax
+      - OAUTH2_PROXY_REVERSE_PROXY=true
+      - OAUTH2_PROXY_COOKIE_CSRF_PER_REQUEST=true
+      - OAUTH2_PROXY_COOKIE_CSRF_EXPIRE=5m
+      - OAUTH2_PROXY_SCOPE=user:email
+      - OAUTH2_PROXY_SKIP_PROVIDER_BUTTON=false
+      - OAUTH2_PROXY_PASS_USER_HEADERS=true
+      - OAUTH2_PROXY_SET_XAUTHREQUEST=true
+    ports:
+      - 4180:4180
+      - 8080:8080
+  code-db:
+    container_name: code-db
+    image: mariadb:10.5
+    restart: always
+    environment:
+      - TZ=UTC
+      - MARIADB_USER=tracker
+      - MARIADB_DATABASE=tracker
+      - MARIADB_PASSWORD=${DB_PASS}
+      - MARIADB_RANDOM_ROOT_PASSWORD=1
+    networks:
+      - tracker
+    volumes:
+      - ./mounts/db:/var/lib/mysql
+  code-db-app:
+    container_name: code-db-app
+    image: mysql:8-debian
+    command: --default-authentication-plugin=mysql_native_password
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASS}
+    ports:
+      - '3306:3306'
+    networks:
+      code-space:
+        aliases:
+          - db
+    volumes:
+      - ./mounts/db-app:/var/lib/mysql
+  code-cache:
+    container_name: code-cache
+    image: redis:6.2-alpine
+    command: redis-server --save 20 1 --loglevel warning --requirepass ${REDIS_PASS}
+    restart: always
+    ports:
+      - '6379:6379'
+    networks:
+      code-space:
+        aliases:
+          - cache
+    volumes:
+      - ./mounts/cache:/data
+  code-tracker:
+    container_name: code-tracker
+    image: leantime/leantime:latest
+    restart: unless-stopped
+    # env_file: /root/Docker/code-leantimeserver/mounts/tracker.env
+    environment:
+      HTTP_PROXY: ${HTTP_PROXY}
+      HTTPS_PROXY: ${HTTPS_PROXY}
+      LEAN_APP_URL: 'https://devbox.techfusion.it'                      # Only needed for subdirectory setup; protocol (http or https) and base URL , trailing slash not needed
+      LEAN_SITENAME: 'DevBox Tracker'                                   # Name of your site, can be changed later
+      LEAN_DB_HOST: 'code-db'                                           # Database host, derived from container_name in leantime_db container
+      LEAN_DB_USER: 'tracker'
+      LEAN_DB_PASSWORD: ${DB_PASS}
+      LEAN_DB_DATABASE: 'tracker'
+      LEAN_DEFAULT_TIMEZONE: 'UTC'                                      # Set default server timezone
+      LEAN_SESSION_PASSWORD: 'GD8Fozemg3AqM9ny86TTfgTeGPXXkPF7'         # Salting sessions. Replace with a strong password
+      LEAN_SESSION_EXPIRATION: 28800                                    # How many seconds after inactivity should we logout?  28800seconds = 8hours
+      LEAN_EMAIL_RETURN: ${SMTP_RCPT}                                   # Return email address, needs to be valid email address format
+      LEAN_EMAIL_USE_SMTP: ${SMTP_ENABLE}                               # Use SMTP? If set to false, the default php mail() function will be used
+      LEAN_EMAIL_SMTP_HOSTS: ${SMTP_HOST}                               # SMTP host
+      LEAN_EMAIL_SMTP_AUTH: ${SMTP_AUTH}                                # SMTP authentication required
+      LEAN_EMAIL_SMTP_USERNAME: ${SMTP_USER}                            # SMTP username
+      LEAN_EMAIL_SMTP_PASSWORD: ${SMTP_PASS}                            # SMTP password
+      LEAN_EMAIL_SMTP_AUTO_TLS: ${SMTP_AUTO_TLS}                        # SMTP Enable TLS encryption automatically if a server supports it
+      LEAN_EMAIL_SMTP_SECURE: 'STARTTLS'                                # SMTP Security protocol (usually one of: TLS, SSL, STARTTLS)
+      LEAN_EMAIL_SMTP_SSLNOVERIFY: 'true'                               # SMTP Allow insecure SSL: Don't verify certificate, accept self-signed, etc.
+      LEAN_EMAIL_SMTP_PORT: ${SMPT_PORT}                                # Port (usually one of 25, 465, 587, 2526)
+    networks:
+      - tracker
+    volumes:
+      - ./mounts/tracker/public_userfiles:/var/www/html/public/userfiles
+      - ./mounts/tracker/userfiles:/var/www/html/userfiles
+    ports:
+      - "127.0.0.1:10080:80"
+    links:
+      - code-db:code-db
+    depends_on:
+      - code-db
+  novnc:
+    container_name: code-novnc
+    hostname: dev.localhost
+    build:
+      context: ./containers_build/novnc
+      args:
+        APT_PROXY: ${APT_PROXY}
+        VNC_PASSWD: ${VNC_PASSWD}
+    image: novnc-techfusion:1.0.0
+    privileged: true
+    restart: always
+    environment:
+      - APT_PROXY=${APT_PROXY}
+      - VNC_PASSWD=${VNC_PASSWD}
+    healthcheck:
+      test: ["CMD", "/usr/bin/nc", "-z", "localhost", "5900"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+    volumes:
+      - ./mounts/shared:/shared
+      - /etc/letsencrypt:/var/run/certs
+    network_mode: "bridge"
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://127.0.0.1:514"
+        syslog-format: "rfc3164"
+        tag: "memcached"
+    ports:
+      - '11443:6080'
