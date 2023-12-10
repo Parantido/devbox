@@ -1,10 +1,7 @@
-# devbox
-
 <h1 align="center">
   <br>
   <a href="http://www.techfusion.it"><img src="https://raw.githubusercontent.com/parantido/devbox/master/imgs/devbox.png" alt="DevBox" width="200"></a>
   <br>
-  Markdownify
   <br>
 </h1>
 
