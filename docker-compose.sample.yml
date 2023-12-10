@@ -37,7 +37,7 @@ services:
   code-cache:
     container_name: code-cache
     image: redis:6.2-alpine
-    command: redis-server --save 20 1 --loglevel warning --requirepass eYVX37EwVmmxKPCDmwMtyKVge1oLd2t80
+    command: redis-server --save 20 1 --loglevel warning --requirepass ${REDIS_PASS}
     restart: always
     ports:
       - '6379:6379'
