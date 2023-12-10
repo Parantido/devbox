@@ -77,13 +77,14 @@ $ cd devbox
 $ cp env.sample .env
 $ cp docker-compose.sample.yml docker-compose.yml
 
-# Add or remove devs by using interactive helper
+# Add/Delete/List DEVs Seats, update docker-compose.yml
+# configuration files
 $ ./users_handler.sh
 
-# Install dependencies
+# Build containers
 $ docker-compose build
 
-# Run the app
+# Execute/Update containers stack
 $ docker-compose up -d 
 ```
 
