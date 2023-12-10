@@ -55,6 +55,11 @@
 * Cross platform
   - Windows, macOS and Linux ready.
 
+### TODO
+- ✅ This is only a placeholder :)
+- ❌ GitLab deployment
+- ❌ Unified authentication (KeyLocker?)
+
 ## How To Use
 
 To clone and run this application, you'll need [Git](https://git-scm.com), [Docker.io](https://docker.com/) and [Docker-Compose](https://docs.docker.com/compose/) installed on your computer. From your command line:
