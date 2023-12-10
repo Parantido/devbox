@@ -71,6 +71,13 @@ $ git clone https://github.com/Parantido/devbox.git
 # Go into the repository
 $ cd devbox
 
+# Edit env.sample and docker-compose.sample.yml file
+$ cp env.sample .env
+$ cp docker-compose.sample.yml docker-compose.yml
+
+# Add or remove devs by using interactive helper
+$ ./users_handler.sh
+
 # Install dependencies
 $ docker-compose build
 
