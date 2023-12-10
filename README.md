@@ -59,6 +59,8 @@
 - ✅ This is only a placeholder :)
 - ❌ GitLab deployment
 - ❌ Unified authentication (KeyLocker?)
+- ❌ --> oAuth2 Proxy
+- ❌ --> Nginx Reverse Proxy
 
 ## How To Use
 
