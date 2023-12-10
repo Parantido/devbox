@@ -24,9 +24,8 @@
 <p align="center">
   <a href="#key-features">Key Features</a> •
   <a href="#how-to-use">How To Use</a> •
-  <a href="#download">Download</a> •
+  <a href="#emailware">Emailware</a> •
   <a href="#credits">Credits</a> •
-  <a href="#related">Related</a> •
   <a href="#license">License</a>
 </p>
 
@@ -58,20 +57,20 @@
 
 ## How To Use
 
-To clone and run this application, you'll need [Git](https://git-scm.com) and [Docker.io](https://www.docker.com/) installed on your computer. From your command line:
+To clone and run this application, you'll need [Git](https://git-scm.com), [Docker.io](https://docker.com/) and [Docker-Compose](https://docs.docker.com/compose/) installed on your computer. From your command line:
 
 ```bash
 # Clone this repository
 $ git clone https://github.com/Parantido/devbox.git
 
 # Go into the repository
-$ cd electron-markdownify
+$ cd devbox
 
 # Install dependencies
-$ npm install
+$ docker-compose build
 
 # Run the app
-$ npm start
+$ docker-compose up -d 
 ```
 
 ## Emailware
