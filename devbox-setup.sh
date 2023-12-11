@@ -1,14 +1,11 @@
 #!/bin/bash
 
 USERNAMES_FILE=".users.db"
+COMPOSE_OUT_PATH="./composers.d"
+NGINX_OUT_PATH="./mounts/nginx/conf.d"
 NGINX_TEMPLATE="./templates/nginx_template.conf"
 DC_HEAD_TEMPLATE="./templates/docker-compose_head-template.yml"
 DC_DELTA_TEMPLATE="./templates/docker-compose_delta-template.yml"
-
-# Check if the created_domains.txt file exists, create it if not
-if [ ! -e "$USERNAMES_FILE" ]; then
-	touch "$USERNAMES_FILE"
-fi
 
 # Retrieve OS commands abs path
 CP=`which cp`
@@ -22,7 +19,13 @@ ECHO=`which echo`
 FOLD=`which fold`
 GREP=`which grep`
 HEAD=`which head`
+TOUCH=`which touch`
 NETSTAT=`which netstat`
+
+# Check if the created_domains.txt file exists, create it if not
+if [ ! -r "$USERNAMES_FILE" ]; then
+	$TOUCH "$USERNAMES_FILE"
+fi
 
 # This function will check if the username supplied is valid
 is_valid_username() {
@@ -136,6 +139,7 @@ add_dev() {
 	done
 
 	# Add the new domain to the list
+	$SED -i '/^$/d' $USERNAMES_FILE
 	$ECHO "$userInput|$portInput|$PASSWORD" >> $USERNAMES_FILE
 	$ECHO -e "	$(ColorGreen 'Dev seat successfully added!')"
 	sleep 1
@@ -166,8 +170,8 @@ del_dev() {
 			read -p " " answer 
 			case $answer in
 				[Yy][Ee][Ss])
+					$SED -i '/^$/d' $USERNAMES_FILE
 					$SED -i "/^$userInput$/d" $USERNAMES_FILE
-					# $RM "nginx_$userInput.conf"
 					$ECHO -e "	$userInput seat removed successfully."
 					sleep 1
 					;;
@@ -182,6 +186,9 @@ del_dev() {
 }
 
 list_dev() {
+	# File maintenance
+	$SED -i '/^$/d' $USERNAMES_FILE
+
 	count=0
 	while IFS= read -r line
 	do
@@ -195,9 +202,6 @@ list_dev() {
 }
 
 rewrite_conf() {
-	NGINX_OUT_PATH="./mounts/nginx/conf.d"
-	COMPOSE_OUT_PATH="./composers.d"
-
 	# Check for dev existence before proceeding
 	if isdev_empty ; then
 		$ECHO -e "	$(ColorRed 'ee)') No dev seats configured, please create some before!" 
