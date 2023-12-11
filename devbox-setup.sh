@@ -8,19 +8,20 @@ DC_HEAD_TEMPLATE="./templates/docker-compose_head-template.yml"
 DC_DELTA_TEMPLATE="./templates/docker-compose_delta-template.yml"
 
 # Retrieve OS commands abs path
-CP=`which cp`
-RM=`which rm`
-TR=`which tr`
-WC=`which wc`
-CAT=`which cat`
-CUT=`which cut`
-SED=`which sed`
-ECHO=`which echo`
-FOLD=`which fold`
-GREP=`which grep`
-HEAD=`which head`
-TOUCH=`which touch`
-NETSTAT=`which netstat`
+CP=`which cp`               ; [[ ! -x "$CP" ]]      && (echo "Copy command not found!" ; exit 1)
+RM=`which rm`               ; [[ ! -x "$RM" ]]      && (echo "Remove command not found!" ; exit 1)
+TR=`which tr`               ; [[ ! -x "$TR" ]]      && (echo "Translate command not found!" ; exit 1)
+WC=`which wc`               ; [[ ! -x "$WC" ]]      && (echo "Wordcount command not found!" ; exit 1)
+CAT=`which cat`             ; [[ ! -x "$CAT" ]]     && (echo "Concatenate command not found!" ; exit 1)
+CUT=`which cut`             ; [[ ! -x "$CUT" ]]     && (echo "Cut command not found!" ; exit 1)
+SED=`which sed`             ; [[ ! -x "$SED" ]]     && (echo "Stream editor command not found!" ; exit 1)
+ECHO=`which echo`           ; [[ ! -x "$ECHO" ]]    && (echo "Echo command not found!" ; exit 1)
+FOLD=`which fold`           ; [[ ! -x "$FOLD" ]]    && (echo "Fold command not found!" ; exit 1)
+GREP=`which grep`           ; [[ ! -x "$GREP" ]]    && (echo "Grep command not found!" ; exit 1)
+HEAD=`which head`           ; [[ ! -x "$HEAD" ]]    && (echo "Head command not found!" ; exit 1)
+TOUCH=`which touch`         ; [[ ! -x "$TOUCH" ]]   && (echo "Touch command not found!" ; exit 1)
+NETSTAT=`which netstat`     ; [[ ! -x "$NETSTAT" ]] && (echo "Network statistic command not found!" ; exit 1)
+DC=`which docker-compose`   ; [[ ! -x "$DC" ]]      && (echo "Docker Compose command not found!" ; exit 1)
 
 # Check if the created_domains.txt file exists, create it if not
 if [ ! -r "$USERNAMES_FILE" ]; then
@@ -264,6 +265,78 @@ rewrite_conf() {
 	sleep 2
 }
 
+dc_handle() {
+	local action="$1"
+	local answer=""
+
+	case $action in
+		start)
+			$ECHO -ne "	Starting DevBox ... "
+			$DC build > /dev/null 2>&1
+			$DC up -d > /dev/null 2>&1
+			echo "done."
+			sleep 1
+		;;
+		restart)
+			$ECHO -ne "	$(ColorOrange '!!)') This is going to temporary stop all services, are you sure? (yes/no): "
+			read -p " " answer 
+			case $answer in
+				[Yy][Ee][Ss])
+					$ECHO -ne "	Restarting DevBox ... "
+					$DC build > /dev/null 2>&1
+					$DC restart > /dev/null 2>&1
+					echo "done."
+					sleep 1
+					;;
+				*)
+					$ECHO -e "	$(ColorRed 'ee)') Action interrupted answer!" 
+					sleep 1
+					return
+					;;
+			esac
+		;;
+		stop)
+			$ECHO -ne "	$(ColorOrange '!!)') This is going to stop all services, are you sure? (yes/no): "
+			read -p " " answer 
+			case $answer in
+				[Yy][Ee][Ss])
+					$ECHO -ne "	Stopping DevBox ... "
+					$DC down --remove-orphans > /dev/null 2>&1
+					echo "done."
+					sleep 1
+					;;
+				*)
+					$ECHO -e "	$(ColorRed 'ee)') Action interrupted!" 
+					sleep 1
+					return
+					;;
+			esac
+		;;
+		clean)
+			$ECHO -ne "	$(ColorOrange '!!)') This is going to stop and clean everything up, are you sure? (yes/no): "
+			read -p " " answer 
+			case $answer in
+				[Yy][Ee][Ss])
+					$ECHO -ne "	Stopping and Cleaning DevBox ... "
+					$DC down --remove-orphans -v --rmi > /dev/null 2>&1
+					echo "done."
+					sleep 1
+					;;
+				*)
+					$ECHO -e "	$(ColorRed 'ee)') Action interrupted!" 
+					sleep 1
+					return
+					;;
+			esac
+		;;
+		*)
+			$ECHO -e "	$(ColorRed 'ee)') Invalid Action, aborting!" 
+			sleep 1
+			return
+			;;
+	esac
+}
+
 ##
 # Color  Variables
 ##
@@ -292,11 +365,14 @@ ColorBlue() {
 menu() {
 	printf "\033c"
 	$ECHO -ne "
-	DevBox Helper
-	$(ColorGreen '1)') Add a new dev seat
-	$(ColorGreen '2)') Delete a dev seat
-	$(ColorGreen '3)') List all seats
-	$(ColorGreen '4)') Rewrite docker-compose.yml
+        ${green}DevBox Helper${clear}
+	$(ColorGreen '1)') ${orange}Add${clear} a New Dev Seat
+	$(ColorGreen '2)') ${red}Delete${clear} a Dev Seat
+	$(ColorGreen '3)') ${orange}List${clear} all Seats
+	$(ColorGreen '4)') ${red}Rewrite${clear} DevBox Config
+	$(ColorGreen '5)') ${orange}Start${clear} DevBox
+	$(ColorGreen '6)') ${red}Restart${clear} DevBox 
+	$(ColorGreen '7)') ${red}Stop${clear} DevBox
 	$(ColorGreen '0)') Exit
 	$(ColorBlue 'Choose an option:') "
 	read a
@@ -305,7 +381,10 @@ menu() {
 		2) del_dev ; menu ;;
 		3) list_dev ; menu ;;
 		4) rewrite_conf ; menu ;;
-		0) printf "\033c" ; exit 0 ;;
+		5) dc_handle "start" ; menu ;;
+		6) dc_handle "restart" ; menu ;;
+		7) dc_handle "stop" ; menu ;;
+		0|[Qq]) printf "\033c" ; exit 0 ;;
 		*) $ECHO -e $red "	Wrong option." $clear; sleep 1 ; menu ;;
 	esac
 }
