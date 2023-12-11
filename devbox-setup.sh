@@ -32,7 +32,7 @@ is_valid_username() {
 
 # This function will check if the dev username already exists
 username_exists() {
-	$GREP -q "^$1$" $USERNAMES_FILE
+	$GREP -q "^$1|" $USERNAMES_FILE
 }
 
 # This function will check for an already existing port 
@@ -42,7 +42,7 @@ port_exists() {
 	do
 		line_arr=(${line//|/ })
 		if [ "${line_arr[1]}" == "$1" ]; then
-		yy	# 0 = true
+			# 0 = true
 			return 0
 		fi
 	done < $USERNAMES_FILE
@@ -65,6 +65,7 @@ isdev_empty() {
 # This Function will add a new dev seat
 add_dev() {
 	local userInput=""
+	local portInput=""
 
 	# Autogenerate a random password
 	PASSWORD=$($TR -cd '[:alnum:]' < /dev/urandom | $FOLD -w15 | $HEAD -n 1)
@@ -115,6 +116,10 @@ add_dev() {
 			$ECHO -ne "	$(ColorOrange '!!)') Port $portInput is already bound on local system, do you want to continue? (yes/no): "
 			read -p " " answer 
 			case $answer in
+				[Yy][Ee][Ss])
+					$ECHO -e "	$(ColorOrange '!!)') Forcing the binding assigment ..."
+					sleep 1
+					;;
 				[Nn][Oo])
 					$ECHO -e "	$(ColorRed 'ee)') Operation aborted!"
 					sleep 1
@@ -213,11 +218,20 @@ rewrite_conf() {
 	DOCKER_COMPOSE_OUTPUT="${COMPOSE_OUT_PATH}/docker-compose.yml"
 	$CP "$DC_HEAD_TEMPLATE" "$DOCKER_COMPOSE_OUTPUT"
 
-	$ECHO "$(ColorGreen 'Configuration files generated'):"
+	$ECHO "	$(ColorGreen 'Configuration files generated'):"
 	while IFS= read -r line
 	do
 		# Split by user and port
 		line_arr=(${line//|/ })
+
+		echo "Username size ${#line_arr[0]}, port size ${#line_arr[1]}"
+
+		# Skip the line if invalid
+		[[ "${#line_arr[0]}" -le "1" ]] && continue
+		[[ "${#line_arr[1]}" -le "1" ]] && continue
+
+		echo "Continuo?"
+		sleep 1
 
 		# Delete Nginx configuration file if already exists
 		# and dump it again from template
@@ -228,7 +242,7 @@ rewrite_conf() {
 		# Replace placeholders
 		$SED -i "s/{{USERNAME}}/${line_arr[0]}/g" $NGINX_OUTPUT
 		$SED -i "s/{{PORT}}/${line_arr[1]}/g" $NGINX_OUTPUT
-		$ECHO "Nginx Configuration: $(ColorGreen ${NGINX_OUTPUT})"
+		$ECHO "	- Nginx Configuration: $(ColorGreen ${NGINX_OUTPUT})"
 
 		# Create Docker Compose file
 		DOCKER_COMPOSE_TMP_OUTPUT="${COMPOSE_OUT_PATH}/docker-compose_${line_arr[0]}.yml"
@@ -240,7 +254,7 @@ rewrite_conf() {
 	done < $USERNAMES_FILE
 
 	# Last line
-	$ECHO "Docker Compose File: $(ColorGreen ${DOCKER_COMPOSE_OUTPUT})"
+	$ECHO "	- Docker Compose File: $(ColorGreen ${DOCKER_COMPOSE_OUTPUT})"
 
 	# Wait for proper reading
 	sleep 2
