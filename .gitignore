@@ -1,9 +1,9 @@
-docker-compose.yml
-composers.d/*
-.users.db
 .env
+.users.db
+mounts/db/*
+composers.d/*
 mounts/cache/*
 mounts/config/*
-mounts/db/*
 mounts/db-app/*
 mounts/tracker/*
+docker-compose.yml
