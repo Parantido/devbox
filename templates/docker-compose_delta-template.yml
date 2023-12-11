@@ -1,0 +1,30 @@
+  code-{{USERNAME}}:
+    build:
+      context: ./containers_build/code-space
+      args:
+        APT_PROXY: ${APT_PROXY}
+    image: codespace-techfusion:1.0.0
+    container_name: code-{{USERNAME}}
+    environment:
+      - TZ=UTC
+      - PUID=1000
+      - PGID=1000
+      - PASSWORD={{PASSWORD}}
+      - HTTP_PROXY=${HTTP_PROXY}
+      - HTTPS_PROXY=${HTTPS_PROXY}
+      - DEFAULT_WORKSPACE=/config/workspace
+    networks:
+      - code-space
+    links:
+      - code-db-app:code-db
+      - code-cache:code-cache
+    volumes:
+      - /root/Docker/code-server/mounts/config/pavlo:/config
+      - /root/Docker/code-server/mounts/shared:/shared
+      - /etc/letsencrypt:/var/run/certs
+    ports:
+      - "127.0.0.1:{{PORT}}:8443"
+      - {{PUB_PORT_1}}:3000
+      - {{PUB_PORT_2}}:4200
+    dns: ${DNS_HOST}
+    restart: always

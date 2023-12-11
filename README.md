@@ -31,6 +31,7 @@
 
 ## Key Features
 
+* Code Everywhere: every dev just need a browser
 * Every service deployed in a separate container
 * 1 Command Deployment
 * Live Tracker (Powered with [LeanTime.io](https://leantime.io)) for:
@@ -79,7 +80,7 @@ $ cp docker-compose.sample.yml docker-compose.yml
 
 # Add/Delete/List DEVs Seats, update docker-compose.yml
 # configuration files
-$ ./users_handler.sh
+$ ./devbox-setup.sh
 
 # Build containers
 $ docker-compose build

@@ -90,25 +90,25 @@ services:
     environment:
       HTTP_PROXY: ${HTTP_PROXY}
       HTTPS_PROXY: ${HTTPS_PROXY}
-      LEAN_APP_URL: 'https://devbox.techfusion.it'                      # Only needed for subdirectory setup; protocol (http or https) and base URL , trailing slash not needed
-      LEAN_SITENAME: 'DevBox Tracker'                                   # Name of your site, can be changed later
-      LEAN_DB_HOST: 'code-db'                                           # Database host, derived from container_name in leantime_db container
+      LEAN_APP_URL: 'https://devbox.${DOMAIN}'                      # Only needed for subdirectory setup; protocol (http or https) and base URL , trailing slash not needed
+      LEAN_SITENAME: 'DevBox Tracker'                               # Name of your site, can be changed later
+      LEAN_DB_HOST: 'code-db'                                       # Database host, derived from container_name in leantime_db container
       LEAN_DB_USER: 'tracker'
-      LEAN_DB_PASSWORD: ${DB_PASS}
+      LEAN_DB_PASSWORD: '${DB_PASS}'
       LEAN_DB_DATABASE: 'tracker'
-      LEAN_DEFAULT_TIMEZONE: 'UTC'                                      # Set default server timezone
-      LEAN_SESSION_PASSWORD: 'GD8Fozemg3AqM9ny86TTfgTeGPXXkPF7'         # Salting sessions. Replace with a strong password
-      LEAN_SESSION_EXPIRATION: 28800                                    # How many seconds after inactivity should we logout?  28800seconds = 8hours
-      LEAN_EMAIL_RETURN: ${SMTP_RCPT}                                   # Return email address, needs to be valid email address format
-      LEAN_EMAIL_USE_SMTP: ${SMTP_ENABLE}                               # Use SMTP? If set to false, the default php mail() function will be used
-      LEAN_EMAIL_SMTP_HOSTS: ${SMTP_HOST}                               # SMTP host
-      LEAN_EMAIL_SMTP_AUTH: ${SMTP_AUTH}                                # SMTP authentication required
-      LEAN_EMAIL_SMTP_USERNAME: ${SMTP_USER}                            # SMTP username
-      LEAN_EMAIL_SMTP_PASSWORD: ${SMTP_PASS}                            # SMTP password
-      LEAN_EMAIL_SMTP_AUTO_TLS: ${SMTP_AUTO_TLS}                        # SMTP Enable TLS encryption automatically if a server supports it
-      LEAN_EMAIL_SMTP_SECURE: 'STARTTLS'                                # SMTP Security protocol (usually one of: TLS, SSL, STARTTLS)
-      LEAN_EMAIL_SMTP_SSLNOVERIFY: 'true'                               # SMTP Allow insecure SSL: Don't verify certificate, accept self-signed, etc.
-      LEAN_EMAIL_SMTP_PORT: ${SMPT_PORT}                                # Port (usually one of 25, 465, 587, 2526)
+      LEAN_DEFAULT_TIMEZONE: 'UTC'                                  # Set default server timezone
+      LEAN_SESSION_PASSWORD: 'GD8Fozemg3AqM9ny86TTfgTeGPXXkPF7'     # Salting sessions. Replace with a strong password
+      LEAN_SESSION_EXPIRATION: 28800                                # How many seconds after inactivity should we logout?  28800seconds = 8hours
+      LEAN_EMAIL_RETURN: '${SMTP_RCPT}'                             # Return email address, needs to be valid email address format
+      LEAN_EMAIL_USE_SMTP: '${SMTP_ENABLE}'                         # Use SMTP? If set to false, the default php mail() function will be used
+      LEAN_EMAIL_SMTP_HOSTS: '${SMTP_HOST}'                         # SMTP host
+      LEAN_EMAIL_SMTP_AUTH: '${SMTP_AUTH}'                          # SMTP authentication required
+      LEAN_EMAIL_SMTP_USERNAME: '${SMTP_USER}'                      # SMTP username
+      LEAN_EMAIL_SMTP_PASSWORD: '${SMTP_PASS}'                      # SMTP password
+      LEAN_EMAIL_SMTP_AUTO_TLS: '${SMTP_AUTO_TLS}'                  # SMTP Enable TLS encryption automatically if a server supports it
+      LEAN_EMAIL_SMTP_SECURE: 'STARTTLS'                            # SMTP Security protocol (usually one of: TLS, SSL, STARTTLS)
+      LEAN_EMAIL_SMTP_SSLNOVERIFY: 'true'                           # SMTP Allow insecure SSL: Don't verify certificate, accept self-signed, etc.
+      LEAN_EMAIL_SMTP_PORT: '${SMTP_PORT}'                          # Port (usually one of 25, 465, 587, 2526)
     networks:
       - tracker
     volumes:

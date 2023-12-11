@@ -1,4 +1,5 @@
 docker-compose.yml
-mounts/*
+composers.d/*
 .users.db
+mounts/*
 .env
