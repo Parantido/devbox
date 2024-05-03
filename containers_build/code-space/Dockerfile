@@ -16,9 +16,6 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get -y update
 RUN apt-get -y install sudo apt-utils aptitude curl wget ca-certificates curl gnupg git
 
-# Install additional packages if SUDO
-RUN echo "SUDO? $SUDO" ; if [ -z "$SUDO" ] ; then echo "Not a sudoer ... do nothing" ; else apt-get -y install netcat net-tools iputils-ping iputils-tracepath iproute2 ; fi
-
 # Use a PPA to ensure a specific version of Node (the default Node on
 # Ubuntu 20.04 is v10, which is too old):
 RUN mkdir -p /etc/apt/keyrings
@@ -39,7 +36,6 @@ COPY ./bin/boot_run.sh /usr/local/bin/boot_run.sh
 
 # Create unprivileged user
 RUN adduser --gecos '' --disabled-password coder 
-	# && echo "coder ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/nopasswd
 
 # Switch to unprivileged user
 USER 1000
