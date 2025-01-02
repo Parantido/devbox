@@ -58,10 +58,10 @@
 
 ### TODO
 - ✅ Helper Script Provided
+- ✅ Traefik Automated Reverse Proxy
 - ❌ GitLab deployment
 - ❌ Unified authentication (KeyLocker?)
 - ❌ --> oAuth2 Proxy
-- ❌ --> Nginx Reverse Proxy
 
 ## How To Use
 
