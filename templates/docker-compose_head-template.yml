@@ -1,153 +1,143 @@
 version: "3.3"
 
 networks:
-  proxy:
   tracker:
   code-space:
 
 services:
-  oauth2-proxy:
-    image: quay.io/oauth2-proxy/oauth2-proxy
-    container_name: oauth2-proxy
-    restart: always
-    networks:
-      - proxy
+  code-proxy:
+    container_name: ${TRAEFIK_CONTAINER_NAME}
+    image: ${TRAEFIK_IMAGE}
     command:
-      - --http-address
-      - 0.0.0.0:4180
-      - --cookie-domain
-      - ${DOMAIN}
-      - --whitelist-domain=*.${DOMAIN}
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.myresolver.acme.dnschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.dnschallenge.provider=${TRAEFIK_DNS_PROVIDER}"
+      - "--certificatesresolvers.myresolver.acme.storage=${TRAEFIK_ACME_STORAGE}"
+      - "--certificatesresolvers.myresolver.acme.email=${TRAEFIK_ACME_EMAIL}"
     environment:
-      - OAUTH2_PROXY_COOKIE_SECRET=fLIblJsthbMhgELnmpqrCbWQD9P1vyDfI5SAs8BUG6c=
-      - OAUTH2_PROXY_CLIENT_ID=
-      - OAUTH2_PROXY_CLIENT_SECRET=
-      - OAUTH2_PROXY_PROVIDER=github
-      - OAUTH2_PROXY_EMAIL_DOMAINS=*
-      - OAUTH2_PROXY_GITHUB_USER="Parantido"
-      - OAUTH2_PROXY_REDIRECT_URL=https://auth.${DOMAIN}/oauth2/callback
-      - OAUTH2_PROXY_HTTP_ADDRESS=0.0.0.0:4180
-      - OAUTH2_PROXY_COOKIE_DOMAINS=${DOMAIN}
-      - OAUTH2_PROXY_SESSION_STORE_TYPE=cookie
-      - OAUTH2_PROXY_COOKIE_SAMESITE=lax
-      - OAUTH2_PROXY_REVERSE_PROXY=true
-      - OAUTH2_PROXY_COOKIE_CSRF_PER_REQUEST=true
-      - OAUTH2_PROXY_COOKIE_CSRF_EXPIRE=5m
-      - OAUTH2_PROXY_SCOPE=user:email
-      - OAUTH2_PROXY_SKIP_PROVIDER_BUTTON=false
-      - OAUTH2_PROXY_PASS_USER_HEADERS=true
-      - OAUTH2_PROXY_SET_XAUTHREQUEST=true
+      - NO_PROXY=${NO_PROXY}
+      - HTTP_PROXY=${HTTP_PROXY}
+      - HTTPS_PROXY=${HTTPS_PROXY}
+      - HETZNER_API_KEY=${TRAEFIK_HETZNER_API_KEY}
+    networks:
+      - tracker
+      - code-space
     ports:
-      - 4180:4180
-      - 8080:8080
+      - "${TRAEFIK_HTTP_PORT}:80"
+      - "${TRAEFIK_HTTPS_PORT}:443"
+      - "${TRAEFIK_API_PORT}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${TRAEFIK_ACME_VOLUME}:${TRAEFIK_ACME_STORAGE}
+
   code-db:
-    container_name: code-db
-    image: mariadb:10.5
+    container_name: ${DB_CONTAINER_NAME}
+    image: ${DB_IMAGE}
     restart: always
     environment:
-      - TZ=UTC
-      - MARIADB_USER=tracker
-      - MARIADB_DATABASE=tracker
+      - TZ=${TIMEZONE}
+      - MARIADB_USER=${DB_USER}
+      - MARIADB_DATABASE=${DB_NAME}
       - MARIADB_PASSWORD=${DB_PASS}
       - MARIADB_RANDOM_ROOT_PASSWORD=1
     networks:
       - tracker
     volumes:
-      - ./mounts/db:/var/lib/mysql
+      - ${DB_VOLUME}:/var/lib/mysql
+
   code-db-app:
-    container_name: code-db-app
-    image: mysql:8-debian
+    container_name: ${DB_APP_CONTAINER_NAME}
+    image: ${DB_APP_IMAGE}
     command: --default-authentication-plugin=mysql_native_password
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASS}
     ports:
-      - '3306:3306'
+      - "${DB_APP_PORT}:3306"
     networks:
       code-space:
         aliases:
           - db
     volumes:
-      - ./mounts/db-app:/var/lib/mysql
-  code-cache:
-    container_name: code-cache
-    image: redis:6.2-alpine
-    command: redis-server --save 20 1 --loglevel warning --requirepass ${REDIS_PASS}
+      - ${DB_APP_VOLUME}:/var/lib/mysql
+
+  code-db-admin:
+    container_name: ${DB_ADMIN_CONTAINER_NAME}
+    image: ${DB_ADMIN_IMAGE}
     restart: always
     ports:
-      - '6379:6379'
+      - "${DB_ADMIN_PORT}:80"
+    networks:
+      - code-space
+    links:
+      - code-db-app:db
+    depends_on:
+      - code-db-app
+    environment:
+      - PMA_ARBITRARY=1
+
+  code-cache:
+    container_name: ${CACHE_CONTAINER_NAME}
+    image: ${CACHE_IMAGE}
+    command: redis-server --save 20 1 --loglevel warning --requirepass ${CACHE_PASS}
+    restart: always
+    ports:
+      - "${CACHE_PORT}:6379"
     networks:
       code-space:
         aliases:
           - cache
     volumes:
-      - ./mounts/cache:/data
+      - ${CACHE_VOLUME}:/data
+
   code-tracker:
-    container_name: code-tracker
-    image: leantime/leantime:latest
-    restart: unless-stopped
-    # env_file: /root/Docker/code-leantimeserver/mounts/tracker.env
-    environment:
-      HTTP_PROXY: ${HTTP_PROXY}
-      HTTPS_PROXY: ${HTTPS_PROXY}
-      LEAN_APP_URL: 'https://devbox.${DOMAIN}'                      # Only needed for subdirectory setup; protocol (http or https) and base URL , trailing slash not needed
-      LEAN_SITENAME: 'DevBox Tracker'                               # Name of your site, can be changed later
-      LEAN_DB_HOST: 'code-db'                                       # Database host, derived from container_name in leantime_db container
-      LEAN_DB_USER: 'tracker'
-      LEAN_DB_PASSWORD: '${DB_PASS}'
-      LEAN_DB_DATABASE: 'tracker'
-      LEAN_DEFAULT_TIMEZONE: 'UTC'                                  # Set default server timezone
-      LEAN_SESSION_PASSWORD: 'GD8Fozemg3AqM9ny86TTfgTeGPXXkPF7'     # Salting sessions. Replace with a strong password
-      LEAN_SESSION_EXPIRATION: 28800                                # How many seconds after inactivity should we logout?  28800seconds = 8hours
-      LEAN_EMAIL_RETURN: '${SMTP_RCPT}'                             # Return email address, needs to be valid email address format
-      LEAN_EMAIL_USE_SMTP: '${SMTP_ENABLE}'                         # Use SMTP? If set to false, the default php mail() function will be used
-      LEAN_EMAIL_SMTP_HOSTS: '${SMTP_HOST}'                         # SMTP host
-      LEAN_EMAIL_SMTP_AUTH: '${SMTP_AUTH}'                          # SMTP authentication required
-      LEAN_EMAIL_SMTP_USERNAME: '${SMTP_USER}'                      # SMTP username
-      LEAN_EMAIL_SMTP_PASSWORD: '${SMTP_PASS}'                      # SMTP password
-      LEAN_EMAIL_SMTP_AUTO_TLS: '${SMTP_AUTO_TLS}'                  # SMTP Enable TLS encryption automatically if a server supports it
-      LEAN_EMAIL_SMTP_SECURE: 'STARTTLS'                            # SMTP Security protocol (usually one of: TLS, SSL, STARTTLS)
-      LEAN_EMAIL_SMTP_SSLNOVERIFY: 'true'                           # SMTP Allow insecure SSL: Don't verify certificate, accept self-signed, etc.
-      LEAN_EMAIL_SMTP_PORT: '${SMTP_PORT}'                          # Port (usually one of 25, 465, 587, 2526)
-    networks:
-      - tracker
-    volumes:
-      - ./mounts/tracker/public_userfiles:/var/www/html/public/userfiles
-      - ./mounts/tracker/userfiles:/var/www/html/userfiles
-    ports:
-      - "127.0.0.1:10080:80"
-    links:
-      - code-db:code-db
-    depends_on:
-      - code-db
-  novnc:
-    container_name: code-novnc
-    hostname: dev.localhost
-    build:
-      context: ./containers_build/novnc
-      args:
-        APT_PROXY: ${APT_PROXY}
-        VNC_PASSWD: ${VNC_PASSWD}
-    image: novnc-techfusion:1.0.0
-    privileged: true
+    container_name: ${TRACKER_CONTAINER_NAME}
+    image: ${TRACKER_IMAGE}
     restart: always
     environment:
-      - APT_PROXY=${APT_PROXY}
-      - VNC_PASSWD=${VNC_PASSWD}
-    healthcheck:
-      test: ["CMD", "/usr/bin/nc", "-z", "localhost", "5900"]
-      interval: 5s
-      timeout: 10s
-      retries: 5
+      NO_PROXY: ${NO_PROXY}
+      HTTP_PROXY: ${HTTP_PROXY}
+      HTTPS_PROXY: ${HTTPS_PROXY}
+      LEAN_DEBUG: ${TRACKER_DEBUG}
+      LEAN_APP_URL: https://${HOSTNAME}.${DOMAIN}
+      LEAN_APP_DIR: ${TRACKER_APP_DIR}
+      LEAN_SITENAME: ${TRACKER_SITENAME}
+      LEAN_DB_HOST: ${TRACKER_DB_HOST}
+      LEAN_DB_USER: ${DB_USER}
+      LEAN_DB_PASSWORD: ${DB_PASS}
+      LEAN_DB_DATABASE: ${DB_NAME}
+      LEAN_DEFAULT_TIMEZONE: ${TRACKER_DEFAULT_TIMEZONE}
+      LEAN_SESSION_SECURE: ${TRACKER_SESSION_SECURE}
+      LEAN_SESSION_PASSWORD: ${TRACKER_SESSION_PASSWORD}
+      LEAN_SESSION_EXPIRATION: ${TRACKER_SESSION_EXPIRATION}
+      LEAN_EMAIL_USE_SMTP: ${SMTP_ENABLE}
+      LEAN_EMAIL_RETURN: ${SMTP_RCPT}
+      LEAN_EMAIL_SMTP_HOSTS: ${SMTP_HOST}
+      LEAN_EMAIL_SMTP_AUTH: ${SMTP_AUTH}
+      LEAN_EMAIL_SMTP_USERNAME: ${SMTP_USER}
+      LEAN_EMAIL_SMTP_PASSWORD: ${SMTP_PASS}
+      LEAN_EMAIL_SMTP_AUTO_TLS: ${SMTP_AUTO_TLS}
+      LEAN_EMAIL_SMTP_SECURE: ${SMTP_SECURE}
+      LEAN_EMAIL_SMTP_SSLNOVERIFY: ${SMTP_SSLNOVERIFY}
+      LEAN_EMAIL_SMTP_PORT: ${SMTP_PORT}
+    networks:
+      - tracker
+      - code-space
     volumes:
-      - ./mounts/shared:/shared
-      - /etc/letsencrypt:/var/run/certs
-    network_mode: "bridge"
-    logging:
-      driver: syslog
-      options:
-        syslog-address: "udp://127.0.0.1:514"
-        syslog-format: "rfc3164"
-        tag: "memcached"
-    ports:
-      - '11443:6080'
+      - ${TRACKER_USER_VOLUME}:/var/www/html/public/userfiles
+      - ${TRACKER_PUBLIC_VOLUME}:/var/www/html/userfiles
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.code-tracker.tls=true"
+      - "traefik.http.routers.code-tracker.entrypoints=websecure"
+      - "traefik.http.routers.code-tracker.tls.certresolver=myresolver"
+      - "traefik.http.routers.code-tracker.rule=Host(`${HOSTNAME}.${DOMAIN}`)"
+      - "traefik.http.services.code-tracker.loadbalancer.server.port=80"
+    links:
+      - code-db:code-db
+      - code-cache:code-cache
+    depends_on:
+      - code-db

@@ -2,8 +2,6 @@
 
 USERNAMES_FILE=".users.db"
 COMPOSE_OUT_PATH="./composers.d"
-NGINX_OUT_PATH="./mounts/nginx/conf.d"
-NGINX_TEMPLATE="./templates/nginx_template.conf"
 DC_HEAD_TEMPLATE="./templates/docker-compose_head-template.yml"
 DC_DELTA_TEMPLATE="./templates/docker-compose_delta-template.yml"
 
@@ -212,9 +210,6 @@ rewrite_conf() {
 
 	# Check for default out paths, if does
 	# not exists just create it!
-	if [ ! -d "${NGINX_OUT_PATH}" ]; then
-		mkdir -p "${NGINX_OUT_PATH}"
-	fi
 	if [ ! -d "${COMPOSE_OUT_PATH}" ]; then
 		mkdir -p "${COMPOSE_OUT_PATH}"
 	fi
@@ -229,25 +224,12 @@ rewrite_conf() {
 		# Split by user and port
 		line_arr=(${line//|/ })
 
-		echo "Username size ${#line_arr[0]}, port size ${#line_arr[1]}"
+		# Debug
+		# echo "Username size ${#line_arr[0]}, port size ${#line_arr[1]}"
 
 		# Skip the line if invalid
 		[[ "${#line_arr[0]}" -le "1" ]] && continue
 		[[ "${#line_arr[1]}" -le "1" ]] && continue
-
-		echo "Continuo?"
-		sleep 1
-
-		# Delete Nginx configuration file if already exists
-		# and dump it again from template
-		NGINX_OUTPUT="${NGINX_OUT_PATH}/nginx_${line_arr[0]}.conf"
-		[[ -r "${NGINX_OUTPUT}" ]] && $RM -fr "${NGINX_OUTPUT}"
-		$CP "$NGINX_TEMPLATE" "$NGINX_OUTPUT"
-
-		# Replace placeholders
-		$SED -i "s/{{USERNAME}}/${line_arr[0]}/g" $NGINX_OUTPUT
-		$SED -i "s/{{PORT}}/${line_arr[1]}/g" $NGINX_OUTPUT
-		$ECHO "	- Nginx Configuration: $(ColorGreen ${NGINX_OUTPUT})"
 
 		# Create Docker Compose file
 		DOCKER_COMPOSE_TMP_OUTPUT="${COMPOSE_OUT_PATH}/docker-compose_${line_arr[0]}.yml"
