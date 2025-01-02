@@ -1,5 +1,6 @@
 .env
 .users.db
+mounts/*
 mounts/db/*
 composers.d/*
 mounts/cache/*
