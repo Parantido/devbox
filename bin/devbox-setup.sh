@@ -224,9 +224,6 @@ rewrite_conf() {
 		# Split by user and port
 		line_arr=(${line//|/ })
 
-		# Debug
-		# echo "Username size ${#line_arr[0]}, port size ${#line_arr[1]}"
-
 		# Skip the line if invalid
 		[[ "${#line_arr[0]}" -le "1" ]] && continue
 		[[ "${#line_arr[1]}" -le "1" ]] && continue
@@ -235,6 +232,7 @@ rewrite_conf() {
 		DOCKER_COMPOSE_TMP_OUTPUT="${COMPOSE_OUT_PATH}/docker-compose_${line_arr[0]}.yml"
 		$CP "$DC_DELTA_TEMPLATE" "$DOCKER_COMPOSE_TMP_OUTPUT"
 		$SED -i "s/{{USERNAME}}/${line_arr[0]}/g" $DOCKER_COMPOSE_TMP_OUTPUT
+		$SED -i "s/{{PASSWORD}}/${line_arr[2]}/g" $DOCKER_COMPOSE_TMP_OUTPUT
 		$SED -i "s/{{PORT}}/${line_arr[1]}/g" $DOCKER_COMPOSE_TMP_OUTPUT
 		$CAT "$DOCKER_COMPOSE_TMP_OUTPUT" >> "$DOCKER_COMPOSE_OUTPUT"
 		$RM -fr "$DOCKER_COMPOSE_TMP_OUTPUT"
