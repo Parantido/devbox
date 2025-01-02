@@ -93,6 +93,30 @@ services:
     volumes:
       - ${CACHE_VOLUME}:/data
 
+  code-auth:
+    container_name: ${AUTH_CONTAINER_NAME}
+    image: ${AUTH_IMAGE}
+    environment:
+      KC_HOSTNAME: localhost
+      KC_HOSTNAME_PORT: 7080
+      KC_HOSTNAME_STRICT_BACKCHANNEL: "true"
+      KEYCLOAK_ADMIN: ${AUTH_MGMT_USERNAME}
+      KEYCLOAK_ADMIN_PASSWORD: ${AUTH_MGMT_PASSWORD}
+      KC_HEALTH_ENABLED: "true"
+      KC_LOG_LEVEL: info
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7080/health/ready"]
+      interval: 15s
+      timeout: 2s
+      retries: 15
+    command: ["start-dev", "--http-port", "7080", "--https-port", "7443"]
+    ports:
+      - "${AUTH_HTTP_PORT}:7080"
+      - "${AUTH_HTTPS_PORT}:7443"
+    networks:
+      - tracker
+      - code-space
+
   code-tracker:
     container_name: ${TRACKER_CONTAINER_NAME}
     image: ${TRACKER_IMAGE}
