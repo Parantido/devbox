@@ -1,3 +1,6 @@
+volumes:
+  local:
+
 networks:
   tracker:
   code-space:
@@ -6,7 +9,9 @@ services:
   code-proxy:
     container_name: ${TRAEFIK_CONTAINER_NAME}
     image: ${TRAEFIK_IMAGE}
+    restart: always
     command:
+      - "--log.level=DEBUG"
       - "--api.insecure=true"
       - "--providers.docker=true"
       - "--entrypoints.web.address=:80"
@@ -91,37 +96,83 @@ services:
     volumes:
       - ${CACHE_VOLUME}:/data
 
-  code-auth:
-    container_name: ${AUTH_CONTAINER_NAME}
-    image: ${AUTH_IMAGE}
+  code-iam:
+    container_name: ${IAM_CONTAINER_NAME}
+    image: ${IAM_IMAGE}
+    command: start-dev
     environment:
-      KC_PROXY: "edge"
-      KC_FEATURES: "docker"
-      KC_HOSTNAME: "${HOSTNAME}.${DOMAIN}"
-      KC_HOSTNAME_PORT: 8080
-      KC_HOSTNAME_STRICT_BACKCHANNEL: "true"
-      KEYCLOAK_ADMIN: ${AUTH_MGMT_USERNAME}
-      KEYCLOAK_ADMIN_PASSWORD: ${AUTH_MGMT_PASSWORD}
-      KC_HEALTH_ENABLED: "true"
-      KC_LOG_LEVEL: info
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
-      interval: 15s
-      timeout: 2s
-      retries: 15
-    command: ["start-dev", "--http-port", "8080"]
+      NO_PROXY: ${NO_PROXY}
+      HTTP_PROXY: ${HTTP_PROXY}
+      HTTPS_PROXY: ${HTTPS_PROXY}
+      KC_LOG: console
+      KC_LOG_LEVEL: debug
+      KC_PROXY: passthrough
+      KC_HOSTNAME_PATH: /iam
+      KC_HTTP_RELATIVE_PATH: /iam
+      KC_HOSTNAME_STRICT: "false"
+      KC_PROXY_HEADERS: xforwarded
+      KC_PROXY_ADDRESS_FORWARDING: "true"
+      KEYCLOAK_ADMIN: ${IAM_MGMT_USERNAME}
+      KEYCLOAK_ADMIN_PASSWORD: ${IAM_MGMT_PASSWORD}
+      KC_HOSTNAME_URL: https://${HOSTNAME}.${DOMAIN}/iam
+      KC_HOSTNAME_ADMIN_URL: https://${HOSTNAME}.${DOMAIN}/iam
     networks:
-      - tracker
       - code-space
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.code-keyk.tls=true"
-      - "traefik.http.routers.code-keyk.entrypoints=websecure"
-      - "traefik.http.routers.code-keyk.tls.certresolver=myresolver"
-      - "traefik.http.routers.code-keyk.middlewares=code-keyk-strip"
-      - "traefik.http.routers.code-keyk.rule=Host(`${HOSTNAME}.${DOMAIN}`) && PathPrefix(`/code/idp`)"
-      - "traefik.http.middlewares.code-keyk-strip.stripprefix.prefixes=/code/idp"
-      - "traefik.http.services.code-keyk.loadbalancer.server.port=8080"
+      - "traefik.http.routers.code-iam.tls=true"
+      - "traefik.http.routers.code-iam.entrypoints=websecure"
+      - "traefik.http.routers.code-iam.tls.certresolver=myresolver"
+      - "traefik.http.routers.code-iam.rule=Host(`${HOSTNAME}.${DOMAIN}`) && PathPrefix(`/iam`)"
+      - "traefik.http.services.code-iam.loadbalancer.server.port=8080"
+    dns: ${DNS_HOST}
+    restart: always
+
+#  code-iam-init:
+#    container_name: ${IAM_CONTAINER_NAME}-init
+#    image: ${IAM_IMAGE}
+#    environment:
+#      REALM: master
+#      KEYCLOAK_ADMIN: ${IAM_MGMT_USERNAME}
+#      KEYCLOAK_ADMIN_PASSWORD: ${IAM_MGMT_PASSWORD}
+#      KCADM_PATH: /opt/bitnami/keycloak/bin/kcadm.sh
+#      KEYCLOAK_URL: http://${HOSTNAME}.${DOMAIN}:8080
+#    entrypoint: /usr/bin/bash
+#    command:
+#      - -exc
+#      - |
+#        # wait until keycloak is ready
+#        while ! curl -sf "$$KEYCLOAK_URL" --output /dev/null; do
+#          echo "Waiting for Keycloak to start up..."
+#          sleep 5
+#        done
+#
+#        echo "Keycloak ready"
+#
+#        kcadm() { local cmd="$$1" ; shift ; "$$KCADM_PATH" "$$cmd" --config /tmp/kcadm.config "$$@" ; }
+#
+#        # login
+#        kcadm config credentials config --server "$$KEYCLOAK_URL" --realm master --user "$$KEYCLOAK_ADMIN" --password "$$KEYCLOAK_ADMIN_PASSWORD"
+#
+#        # create client
+#        kcadm create clients -r $${REALM} -f - << EOF
+#        {
+#          "enabled": true,
+#          "clientId": "example",
+#          "publicClient": true,
+#          "standardFlowEnabled": true,
+#          "fullScopeAllowed": true,
+#          "webOrigins": ["*"],
+#          "redirectUris": ["http://localhost:*", "http://localhost:*/*", "http://127.0.0.1:*", "http://127.0.0.1:*/*" ],
+#          "attributes": {
+#            "access.token.lifespan": "300",
+#            "post.logout.redirect.uris": "+"
+#          }
+#        }
+#        EOF
+#    depends_on:
+#      code-iam:
+#        condition: service_healthy
 
   code-tracker:
     container_name: ${TRACKER_CONTAINER_NAME}
@@ -164,10 +215,11 @@ services:
       - "traefik.http.routers.code-tracker.tls=true"
       - "traefik.http.routers.code-tracker.entrypoints=websecure"
       - "traefik.http.routers.code-tracker.tls.certresolver=myresolver"
-      - "traefik.http.routers.code-tracker.rule=Host(`${HOSTNAME}.${DOMAIN}`)"
+      - "traefik.http.routers.code-tracker.rule=Host(`${HOSTNAME}.${DOMAIN}`) && PathPrefix(`/`)"
       - "traefik.http.services.code-tracker.loadbalancer.server.port=80"
     links:
       - code-db:code-db
       - code-cache:code-cache
     depends_on:
       - code-db
+
