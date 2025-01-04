@@ -6,6 +6,9 @@ networks:
   code-space:
 
 services:
+
+  # This is the reverse proxy, the one that will route  all the ingress traffic and
+  # authenticate & authorize (TODO) every user trying to access a specific resource
   code-proxy:
     container_name: ${TRAEFIK_CONTAINER_NAME}
     image: ${TRAEFIK_IMAGE}
@@ -36,6 +39,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${TRAEFIK_ACME_VOLUME}:${TRAEFIK_ACME_STORAGE}
 
+  # This is the internal database that will be used by architectural app (like keycloak)
+  # it MUST NOT be exposed and reachable by end user
   code-db:
     container_name: ${DB_CONTAINER_NAME}
     image: ${DB_IMAGE}
@@ -45,12 +50,19 @@ services:
       - MARIADB_USER=${DB_USER}
       - MARIADB_DATABASE=${DB_NAME}
       - MARIADB_PASSWORD=${DB_PASS}
-      - MARIADB_RANDOM_ROOT_PASSWORD=1
+      - MARIADB_ROOT_PASSWORD=${DB_ROOT_PASS}
+      - IAM_DB_USERNAME=${IAM_DB_USERNAME}
+      - IAM_DB_PASSWORD=${IAM_DB_PASSWORD}
     networks:
       - tracker
     volumes:
       - ${DB_VOLUME}:/var/lib/mysql
+      - ${DB_INIT_VOLUME}:/docker-entrypoint-initdb.d
+    # Override the entrypoint in this way if you need to change the root password
+    # N.B.: after this you can just login wiht root / <empty password>
+    # entrypoint: mysqld_safe --skip-grant-tables --user=mysql
 
+  # This is an end user reserved database
   code-db-app:
     container_name: ${DB_APP_CONTAINER_NAME}
     image: ${DB_APP_IMAGE}
@@ -67,6 +79,7 @@ services:
     volumes:
       - ${DB_APP_VOLUME}:/var/lib/mysql
 
+  # This is an end user database UI manager
   code-db-admin:
     container_name: ${DB_ADMIN_CONTAINER_NAME}
     image: ${DB_ADMIN_IMAGE}
@@ -82,6 +95,7 @@ services:
     environment:
       - PMA_ARBITRARY=1
 
+  # This is an end user reserved redis service
   code-cache:
     container_name: ${CACHE_CONTAINER_NAME}
     image: ${CACHE_IMAGE}
@@ -96,6 +110,8 @@ services:
     volumes:
       - ${CACHE_VOLUME}:/data
 
+  # The keycloak instance will contains all the information to introduce SSO and MFA
+  # in the whole stack.
   code-iam:
     container_name: ${IAM_CONTAINER_NAME}
     image: ${IAM_IMAGE}
@@ -105,7 +121,7 @@ services:
       HTTP_PROXY: ${HTTP_PROXY}
       HTTPS_PROXY: ${HTTPS_PROXY}
       KC_LOG: console
-      KC_LOG_LEVEL: debug
+      KC_LOG_LEVEL: info
       KC_PROXY: passthrough
       KC_HOSTNAME_PATH: /iam
       KC_HTTP_RELATIVE_PATH: /iam
@@ -116,8 +132,16 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: ${IAM_MGMT_PASSWORD}
       KC_HOSTNAME_URL: https://${HOSTNAME}.${DOMAIN}/iam
       KC_HOSTNAME_ADMIN_URL: https://${HOSTNAME}.${DOMAIN}/iam
+      KC_DB: mariadb
+      KC_DB_URL: jdbc:mariadb://code-db:3306/iam?characterEncoding=UTF-8
+      KC_DB_USERNAME: ${IAM_DB_USERNAME}
+      KC_DB_PASSWORD: ${IAM_DB_PASSWORD}
     networks:
+      - tracker
       - code-space
+    links:
+      - code-db:code-db
+      - code-cache:code-cache
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.code-iam.tls=true"
@@ -125,6 +149,8 @@ services:
       - "traefik.http.routers.code-iam.tls.certresolver=myresolver"
       - "traefik.http.routers.code-iam.rule=Host(`${HOSTNAME}.${DOMAIN}`) && PathPrefix(`/iam`)"
       - "traefik.http.services.code-iam.loadbalancer.server.port=8080"
+    depends_on:
+      - code-db
     dns: ${DNS_HOST}
     restart: always
 
@@ -174,6 +200,7 @@ services:
 #      code-iam:
 #        condition: service_healthy
 
+  # This is the work tracker software
   code-tracker:
     container_name: ${TRACKER_CONTAINER_NAME}
     image: ${TRACKER_IMAGE}
