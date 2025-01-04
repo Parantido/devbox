@@ -60,8 +60,9 @@
 - ✅ Helper Script Provided
 - ✅ Traefik Automated Reverse Proxy
 - ❌ GitLab deployment
-- ❌ Unified authentication (KeyLocker?)
+- ✅ Keycloak IAM/SSO
 - ❌ --> oAuth2 Proxy
+- ❌ --> LDAP integration
 
 ## How To Use
 
@@ -74,19 +75,26 @@ $ git clone https://github.com/Parantido/devbox.git
 # Go into the repository
 $ cd devbox
 
-# Edit env.sample and docker-compose.sample.yml file
+# Copy the env.sample to .env and edit it to fit your needs
 $ cp env.sample .env
-$ cp docker-compose.sample.yml docker-compose.yml
 
-# Add/Delete/List DEVs Seats, update docker-compose.yml
-# configuration files
-$ ./devbox-setup.sh
+# Add/Delete/List DEVs Seats, and update docker-compose.yml
+# by rewriting it (Option 4)
+$ ./bin/devbox-setup.sh
 
 # Build containers
 $ docker-compose build
 
+# You can also force build or use a passthrough proxy if your
+# infrastructure is blocked by a firewall:
+# $ docker-compose build --build-arg http_proxy=http://your.proxy.ip:8080 --build-arg https_proxy=http://your.proxy.ip:8080 --no-cache
+
 # Execute/Update containers stack
-$ docker-compose up -d 
+$ docker-compose up -d --remove-orphans
+
+# Or just use the helper script by running it and selecting
+# the option 6.
+# $ ./bin/devbox-setup.sh
 ```
 
 ## Emailware
