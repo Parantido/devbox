@@ -61,7 +61,8 @@
 - ✅ Traefik Automated Reverse Proxy
 - ❌ GitLab deployment
 - ✅ Keycloak IAM/SSO
-- ❌ --> oAuth2 Proxy
+- ✅ --> Traefik Proxy Integration
+- ✅ --> [Authentication Middleware](containers_build/auth-service/README.md)
 - ❌ --> LDAP integration
 
 ## How To Use
@@ -107,6 +108,10 @@ This software uses the following open source packages:
 
 - [Docker.io](https://www.docker.com/)
 - [Node.js](https://nodejs.org/)
+- [Traefik](https://traefik.io/traefik/)
+- [Code Server](https://github.com/coder/code-server)
+- [Keycloak](https://www.keycloak.org/)
+- [Python](https://www.python.org/)
 
 ## Support
 
