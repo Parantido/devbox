@@ -15,6 +15,7 @@ services:
     restart: always
     command:
       - "--log.level=DEBUG"
+      - "--log.filePath=/var/log/traefik.log"
       - "--api.insecure=true"
       - "--providers.docker=true"
       - "--entrypoints.web.address=:80"
@@ -24,10 +25,16 @@ services:
       - "--certificatesresolvers.myresolver.acme.storage=${TRAEFIK_ACME_STORAGE}"
       - "--certificatesresolvers.myresolver.acme.email=${TRAEFIK_ACME_EMAIL}"
     environment:
-      - NO_PROXY=${NO_PROXY}
-      - HTTP_PROXY=${HTTP_PROXY}
-      - HTTPS_PROXY=${HTTPS_PROXY}
+      # The proxy settings should be enabled to only update traefik itself
+      #- NO_PROXY=${NO_PROXY}
+      #- HTTP_PROXY=${HTTP_PROXY}
+      #- HTTPS_PROXY=${HTTPS_PROXY}
       - HETZNER_API_KEY=${TRAEFIK_HETZNER_API_KEY}
+    labels:
+      - "traefik.http.middlewares.forward-auth.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.forward-auth.forwardauth.address=https://${HOSTNAME}.${DOMAIN}/oauth"
+      - "traefik.http.middlewares.forward-auth.forwardauth.authResponseHeaders=Authorization,X-Forwarded-User,Set-Cookie"
+      - "traefik.http.middlewares.forward-auth.forwardauth.authRequestHeaders=Cookie,Authorization,X-Forwarded-Uri,X-Forwarded-Host,X-Forwarded-Proto,X-Original-Url"
     networks:
       - tracker
       - code-space
@@ -36,8 +43,34 @@ services:
       - "${TRAEFIK_HTTPS_PORT}:443"
       - "${TRAEFIK_API_PORT}:8080"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ${TRAEFIK_CONF_VOLUME}/conf.d:/conf.d
       - ${TRAEFIK_ACME_VOLUME}:${TRAEFIK_ACME_STORAGE}
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  code-auth:
+    build: 
+      context: ./containers_build/auth-service
+    container_name: code-auth
+    restart: always
+    networks:
+      - tracker
+      - code-space
+    environment:
+      - DOMAIN=${DOMAIN}
+      - HOSTNAME=${HOSTNAME}
+      - KEYCLOAK_REALM=master
+      - KEYCLOAK_CLIENT_ID=traefik-client
+      - IAM_DB_HOSTNAME=${IAM_DB_HOSTNAME}
+      - IAM_DB_USERNAME=${IAM_DB_USERNAME}
+      - IAM_DB_PASSWORD=${IAM_DB_PASSWORD}
+      - SSO_URL=https://${HOSTNAME}.${DOMAIN}/iam
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.auth-service.tls=true"
+      - "traefik.http.routers.auth-service.entrypoints=websecure"
+      - "traefik.http.routers.auth-service.tls.certresolver=myresolver"
+      - "traefik.http.services.auth-service.loadbalancer.server.port=3000"
+      - "traefik.http.routers.auth-service.rule=Host(`${HOSTNAME}.${DOMAIN}`) && PathPrefix(`/oauth`)"
 
   # This is the internal database that will be used by architectural app (like keycloak)
   # it MUST NOT be exposed and reachable by end user
@@ -61,54 +94,6 @@ services:
     # Override the entrypoint in this way if you need to change the root password
     # N.B.: after this you can just login wiht root / <empty password>
     # entrypoint: mysqld_safe --skip-grant-tables --user=mysql
-
-  # This is an end user reserved database
-  code-db-app:
-    container_name: ${DB_APP_CONTAINER_NAME}
-    image: ${DB_APP_IMAGE}
-    command: --default-authentication-plugin=mysql_native_password
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASS}
-    ports:
-      - "${DB_APP_PORT}:3306"
-    networks:
-      code-space:
-        aliases:
-          - db
-    volumes:
-      - ${DB_APP_VOLUME}:/var/lib/mysql
-
-  # This is an end user database UI manager
-  code-db-admin:
-    container_name: ${DB_ADMIN_CONTAINER_NAME}
-    image: ${DB_ADMIN_IMAGE}
-    restart: always
-    ports:
-      - "${DB_ADMIN_PORT}:80"
-    networks:
-      - code-space
-    links:
-      - code-db-app:db
-    depends_on:
-      - code-db-app
-    environment:
-      - PMA_ARBITRARY=1
-
-  # This is an end user reserved redis service
-  code-cache:
-    container_name: ${CACHE_CONTAINER_NAME}
-    image: ${CACHE_IMAGE}
-    command: redis-server --save 20 1 --loglevel warning --requirepass ${CACHE_PASS}
-    restart: always
-    ports:
-      - "${CACHE_PORT}:6379"
-    networks:
-      code-space:
-        aliases:
-          - cache
-    volumes:
-      - ${CACHE_VOLUME}:/data
 
   # The keycloak instance will contains all the information to introduce SSO and MFA
   # in the whole stack.
@@ -154,52 +139,6 @@ services:
     dns: ${DNS_HOST}
     restart: always
 
-#  code-iam-init:
-#    container_name: ${IAM_CONTAINER_NAME}-init
-#    image: ${IAM_IMAGE}
-#    environment:
-#      REALM: master
-#      KEYCLOAK_ADMIN: ${IAM_MGMT_USERNAME}
-#      KEYCLOAK_ADMIN_PASSWORD: ${IAM_MGMT_PASSWORD}
-#      KCADM_PATH: /opt/bitnami/keycloak/bin/kcadm.sh
-#      KEYCLOAK_URL: http://${HOSTNAME}.${DOMAIN}:8080
-#    entrypoint: /usr/bin/bash
-#    command:
-#      - -exc
-#      - |
-#        # wait until keycloak is ready
-#        while ! curl -sf "$$KEYCLOAK_URL" --output /dev/null; do
-#          echo "Waiting for Keycloak to start up..."
-#          sleep 5
-#        done
-#
-#        echo "Keycloak ready"
-#
-#        kcadm() { local cmd="$$1" ; shift ; "$$KCADM_PATH" "$$cmd" --config /tmp/kcadm.config "$$@" ; }
-#
-#        # login
-#        kcadm config credentials config --server "$$KEYCLOAK_URL" --realm master --user "$$KEYCLOAK_ADMIN" --password "$$KEYCLOAK_ADMIN_PASSWORD"
-#
-#        # create client
-#        kcadm create clients -r $${REALM} -f - << EOF
-#        {
-#          "enabled": true,
-#          "clientId": "example",
-#          "publicClient": true,
-#          "standardFlowEnabled": true,
-#          "fullScopeAllowed": true,
-#          "webOrigins": ["*"],
-#          "redirectUris": ["http://localhost:*", "http://localhost:*/*", "http://127.0.0.1:*", "http://127.0.0.1:*/*" ],
-#          "attributes": {
-#            "access.token.lifespan": "300",
-#            "post.logout.redirect.uris": "+"
-#          }
-#        }
-#        EOF
-#    depends_on:
-#      code-iam:
-#        condition: service_healthy
-
   # This is the work tracker software
   code-tracker:
     container_name: ${TRACKER_CONTAINER_NAME}
@@ -237,6 +176,11 @@ services:
     volumes:
       - ${TRACKER_USER_VOLUME}:/var/www/html/public/userfiles
       - ${TRACKER_PUBLIC_VOLUME}:/var/www/html/userfiles
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf -o /dev/null http://localhost || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 3
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.code-tracker.tls=true"
@@ -250,3 +194,86 @@ services:
     depends_on:
       - code-db
 
+  # This is an end user reserved database
+  code-db-app:
+    container_name: ${DB_APP_CONTAINER_NAME}
+    image: ${DB_APP_IMAGE}
+    command: --default-authentication-plugin=mysql_native_password
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASS}
+    ports:
+      - "${DB_APP_PORT}:3306"
+    networks:
+      code-space:
+        aliases:
+          - db
+    volumes:
+      - ${DB_APP_VOLUME}:/var/lib/mysql
+
+  # This is an end user database UI manager
+  code-db-admin:
+    container_name: ${DB_ADMIN_CONTAINER_NAME}
+    image: ${DB_ADMIN_IMAGE}
+    restart: always
+    ports:
+      - "${DB_ADMIN_PORT}:80"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.code-db-admin.tls=true"
+      - "traefik.http.routers.code-db-admin.entrypoints=websecure"
+      - "traefik.http.routers.code-db-admin.tls.certresolver=myresolver"
+      - "traefik.http.services.code-db-admin.loadbalancer.server.port=80"
+      - "traefik.http.middlewares.code-db-admin.stripprefix.prefixes=/dbm"
+      - "traefik.http.routers.code-db-admin.rule=Host(`${HOSTNAME}.${DOMAIN}`) && PathPrefix(`/dbm`)"
+    networks:
+      - code-space
+    links:
+      - code-db-app:db
+    depends_on:
+      - code-db-app
+    environment:
+      - PMA_ARBITRARY=1
+
+  # This is an end user reserved redis service
+  code-cache:
+    container_name: ${CACHE_CONTAINER_NAME}
+    image: ${CACHE_IMAGE}
+    command: redis-server --save 20 1 --loglevel warning --requirepass ${CACHE_PASS}
+    restart: always
+    ports:
+      - "${CACHE_PORT}:6379"
+    networks:
+      code-space:
+        aliases:
+          - cache
+    volumes:
+      - ${CACHE_VOLUME}:/data
+
+  # A container that exposes an API to show its IP address
+  code-whoami:
+    container_name: code-whoami
+    image: traefik/whoami
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.code-whoami.tls=true"
+      - "traefik.http.routers.code-whoami.entrypoints=websecure"
+      - "traefik.http.routers.code-whoami.tls.certresolver=myresolver"
+      - "traefik.http.services.code-whoami.loadbalancer.server.port=80"
+      - "traefik.http.middlewares.code-whoami.stripprefix.prefixes=/whoami"
+      - "traefik.http.middlewares.code-whoami-headers.headers.customrequestheaders.X-Original-Url=/whoami"
+      - "traefik.http.routers.code-whoami.rule=Host(`${HOSTNAME}.${DOMAIN}`) && PathPrefix(`/whoami`)"
+      - "traefik.http.routers.code-whoami.middlewares=code-whoami-headers@docker,forward-auth@docker"
+
+  # This container is ment to reastart all unhealthy containers
+  autoheal:
+    container_name: code-autoheal
+    image: willfarrell/autoheal:latest
+    tty: true
+    restart: always
+    environment:
+      - AUTOHEAL_INTERVAL=60
+      - AUTOHEAL_START_PERIOD=300
+      - AUTOHEAL_DEFAULT_STOP_TIMEOUT=10
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
