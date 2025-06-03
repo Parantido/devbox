@@ -14,6 +14,7 @@ services:
     image: ${TRAEFIK_IMAGE}
     restart: always
     command:
+      - "--accesslog=true"
       - "--log.level=DEBUG"
       # Disable this if you don't want to log to the console
       #- "--log.filePath=/var/log/traefik.log"
