@@ -20,7 +20,7 @@ RUN apt-get -y install sudo apt-utils aptitude curl wget ca-certificates curl gn
 # Ubuntu 20.04 is v10, which is too old):
 RUN mkdir -p /etc/apt/keyrings
 RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
-RUN echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list
+RUN echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list
 
 # Now we can install the bulk of the packages:
 RUN apt-get -y update
@@ -29,6 +29,10 @@ RUN apt-get -y install nodejs
 # Install Code Server
 RUN curl -s https://api.github.com/repos/coder/code-server/releases/latest | grep "browser_download_url.*amd64.deb" | cut -d : -f 2,3 | tr -d \" | wget --quiet -i - \
     && dpkg -i *.deb && rm -rf /var/lib/apt/lists/*
+
+# Install Anthropic Claude
+RUN npm install -g @anthropic-ai/claude-code
+RUN npm install -g npm-pack-all
 
 # Copy needed binary files
 COPY ./bin/looper.sh /usr/local/bin/looper.sh
