@@ -9,7 +9,7 @@
       - TZ=UTC
       - PUID=1000
       - PGID=1000
-      - PASSWORD={{PASSWORD}}
+      # PASSWORD no longer needed - auth handled by OAuth2 Proxy
       - HTTP_PROXY=${HTTP_PROXY}
       - HTTPS_PROXY=${HTTPS_PROXY}
       - DEFAULT_WORKSPACE=/config/workspace
@@ -33,10 +33,16 @@
       - "traefik.http.routers.code-{{USERNAME}}.tls=true"
       - "traefik.http.routers.code-{{USERNAME}}.entrypoints=websecure"
       - "traefik.http.routers.code-{{USERNAME}}.tls.certresolver=myresolver"
-      - "traefik.http.routers.code-{{USERNAME}}.middlewares=code-{{USERNAME}}-strip"
+      # Middleware chain: auth -> trailing slash redirect -> strip prefix
+      - "traefik.http.routers.code-{{USERNAME}}.middlewares=authz@docker,code-{{USERNAME}}-slash,code-{{USERNAME}}-strip"
       - "traefik.http.routers.code-{{USERNAME}}.rule=Host(`${HOSTNAME}.${DOMAIN}`) && PathPrefix(`/code/{{USERNAME}}`)"
+      - "traefik.http.middlewares.code-{{USERNAME}}-slash.redirectregex.regex=^(https?://[^/]+/code/{{USERNAME}})$$"
+      - "traefik.http.middlewares.code-{{USERNAME}}-slash.redirectregex.replacement=$${1}/"
+      - "traefik.http.middlewares.code-{{USERNAME}}-slash.redirectregex.permanent=true"
       - "traefik.http.middlewares.code-{{USERNAME}}-strip.stripprefix.prefixes=/code/{{USERNAME}}"
       - "traefik.http.services.code-{{USERNAME}}.loadbalancer.server.port=8443"
     dns: ${DNS_HOST}
     restart: always
+    depends_on:
+      - authz-service
 

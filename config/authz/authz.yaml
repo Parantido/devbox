@@ -1,0 +1,69 @@
+# Authorization Configuration
+# This file defines access control rules for protected resources.
+#
+# Structure:
+#   resources: Map of path patterns to access rules
+#   groups: Named groups of users for easier management
+#   default_policy: 'allow' or 'deny' for paths not matching any resource
+#
+# Path matching:
+#   /code/danilo     - Exact prefix match (matches /code/danilo and /code/danilo/*)
+#   /code/danilo/*   - Explicit wildcard (same behavior, more readable)
+#   /api/*/users     - Glob pattern matching
+#
+# Resource rules:
+#   users: List of GitHub usernames allowed
+#   groups: List of group names (expanded from groups section)
+#   authenticated: true = allow any authenticated user
+
+# Default policy for paths not matching any resource
+default_policy: deny
+
+# User groups for easier management
+groups:
+  admins:
+    - Parantido
+  developers:
+    - Parantido
+    - dropinc
+  # Example: GitHub organization team (if using GitHub teams)
+  # org-team:
+  #   - user1
+  #   - user2
+
+# Protected resources and their access rules
+resources:
+  # Code Server instances - user-specific access
+  /code/danilo:
+    users:
+      - Parantido
+    # Alternatively, use groups:
+    # groups:
+    #   - admins
+
+  /code/dropinc:
+    users:
+      - dropinc
+
+  # Shared resources - multiple users
+  /code/tracker:
+    users:
+      - Parantido
+      - dropinc
+    # Or use a group:
+    # groups:
+    #   - developers
+
+  # Example: Resource accessible by all authenticated users
+  # /public:
+  #   authenticated: true
+
+  # Example: Admin-only resource
+  # /admin:
+  #   groups:
+  #     - admins
+
+  # Plane (when you add it) - accessible by developers group
+  # /plane:
+  #   groups:
+  #     - developers

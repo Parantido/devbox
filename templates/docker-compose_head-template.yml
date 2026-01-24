@@ -7,8 +7,7 @@ networks:
 
 services:
 
-  # This is the reverse proxy, the one that will route  all the ingress traffic and
-  # authenticate & authorize (TODO) every user trying to access a specific resource
+  # This is the reverse proxy, the one that will route all the ingress traffic
   code-proxy:
     container_name: ${TRAEFIK_CONTAINER_NAME}
     image: ${TRAEFIK_IMAGE}
@@ -16,8 +15,6 @@ services:
     command:
       - "--accesslog=true"
       - "--log.level=DEBUG"
-      # Disable this if you don't want to log to the console
-      #- "--log.filePath=/var/log/traefik.log"
       - "--api.insecure=true"
       - "--providers.docker=true"
       - "--entrypoints.web.address=:80"
@@ -27,16 +24,7 @@ services:
       - "--certificatesresolvers.myresolver.acme.storage=${TRAEFIK_ACME_STORAGE}"
       - "--certificatesresolvers.myresolver.acme.email=${TRAEFIK_ACME_EMAIL}"
     environment:
-      # The proxy settings should be enabled to only update traefik itself
-      #- NO_PROXY=${NO_PROXY}
-      #- HTTP_PROXY=${HTTP_PROXY}
-      #- HTTPS_PROXY=${HTTPS_PROXY}
       - HETZNER_API_KEY=${TRAEFIK_HETZNER_API_KEY}
-    labels:
-      - "traefik.http.middlewares.forward-auth.forwardauth.trustForwardHeader=true"
-      - "traefik.http.middlewares.forward-auth.forwardauth.address=https://${HOSTNAME}.${DOMAIN}/oauth"
-      - "traefik.http.middlewares.forward-auth.forwardauth.authResponseHeaders=Authorization,X-Forwarded-User,Set-Cookie"
-      - "traefik.http.middlewares.forward-auth.forwardauth.authRequestHeaders=Cookie,Authorization,X-Forwarded-Uri,X-Forwarded-Host,X-Forwarded-Proto,X-Original-Url"
     networks:
       - tracker
       - code-space
@@ -49,154 +37,98 @@ services:
       - ${TRAEFIK_ACME_VOLUME}:${TRAEFIK_ACME_STORAGE}
       - /var/run/docker.sock:/var/run/docker.sock
 
-  code-auth:
-    build: 
-      context: ./containers_build/auth-service
-    container_name: code-auth
+  # OAuth2 Proxy - handles GitHub OAuth authentication
+  oauth2-proxy:
+    container_name: oauth2-proxy
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
     restart: always
     networks:
-      - tracker
       - code-space
     environment:
-      - DOMAIN=${DOMAIN}
-      - HOSTNAME=${HOSTNAME}
-      - KEYCLOAK_REALM=master
-      - KEYCLOAK_CLIENT_ID=traefik-client
-      - IAM_DB_HOSTNAME=${IAM_DB_HOSTNAME}
-      - IAM_DB_USERNAME=${IAM_DB_USERNAME}
-      - IAM_DB_PASSWORD=${IAM_DB_PASSWORD}
-      - SSO_URL=https://${HOSTNAME}.${DOMAIN}/iam
+      # GitHub OAuth provider
+      - OAUTH2_PROXY_PROVIDER=github
+      - OAUTH2_PROXY_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - OAUTH2_PROXY_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      # Cookie settings (generate with: openssl rand -hex 16)
+      - OAUTH2_PROXY_COOKIE_SECRET=${OAUTH2_COOKIE_SECRET}
+      - OAUTH2_PROXY_COOKIE_SECURE=true
+      - OAUTH2_PROXY_COOKIE_DOMAINS=.${DOMAIN}
+      - OAUTH2_PROXY_COOKIE_SAMESITE=lax
+      # Allow all emails (authorization handled by authz-service)
+      - OAUTH2_PROXY_EMAIL_DOMAINS=*
+      # Server settings
+      - OAUTH2_PROXY_HTTP_ADDRESS=0.0.0.0:4180
+      - OAUTH2_PROXY_REVERSE_PROXY=true
+      - OAUTH2_PROXY_SET_XAUTHREQUEST=true
+      - OAUTH2_PROXY_PASS_ACCESS_TOKEN=true
+      # Redirect URL after OAuth
+      - OAUTH2_PROXY_REDIRECT_URL=https://${HOSTNAME}.${DOMAIN}/oauth2/callback
+      # Whitelist domains for redirect (required for rd parameter to work)
+      - OAUTH2_PROXY_WHITELIST_DOMAINS=.${DOMAIN}
+      # Upstream for auth responses (not used, authz-service handles routing)
+      - OAUTH2_PROXY_UPSTREAMS=static://200
+      # Session settings
+      - OAUTH2_PROXY_SESSION_STORE_TYPE=cookie
+      # Skip auth for the userinfo endpoint (used by authz-service)
+      - OAUTH2_PROXY_SKIP_AUTH_ROUTES=^/oauth2/userinfo$$
+      # Sign out configuration
+      - OAUTH2_PROXY_COOKIE_EXPIRE=168h
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.auth-service.tls=true"
-      - "traefik.http.routers.auth-service.entrypoints=websecure"
-      - "traefik.http.routers.auth-service.tls.certresolver=myresolver"
-      - "traefik.http.services.auth-service.loadbalancer.server.port=3000"
-      - "traefik.http.routers.auth-service.rule=Host(`${HOSTNAME}.${DOMAIN}`) && PathPrefix(`/oauth`)"
+      # OAuth2 proxy routes (no auth middleware - this IS the auth)
+      - "traefik.http.routers.oauth2-proxy.tls=true"
+      - "traefik.http.routers.oauth2-proxy.entrypoints=websecure"
+      - "traefik.http.routers.oauth2-proxy.tls.certresolver=myresolver"
+      - "traefik.http.routers.oauth2-proxy.rule=Host(`${HOSTNAME}.${DOMAIN}`) && PathPrefix(`/oauth2`)"
+      - "traefik.http.services.oauth2-proxy.loadbalancer.server.port=4180"
 
-  # This is the internal database that will be used by architectural app (like keycloak)
-  # it MUST NOT be exposed and reachable by end user
-  code-db:
-    container_name: ${DB_CONTAINER_NAME}
-    image: ${DB_IMAGE}
+  # Authorization Service - checks user permissions against YAML config
+  authz-service:
+    build:
+      context: ./containers_build/authz-service
+    container_name: authz-service
     restart: always
-    environment:
-      - TZ=${TIMEZONE}
-      - MARIADB_USER=${DB_USER}
-      - MARIADB_DATABASE=${DB_NAME}
-      - MARIADB_PASSWORD=${DB_PASS}
-      - MARIADB_ROOT_PASSWORD=${DB_ROOT_PASS}
-      - IAM_DB_USERNAME=${IAM_DB_USERNAME}
-      - IAM_DB_PASSWORD=${IAM_DB_PASSWORD}
     networks:
-      - tracker
-    volumes:
-      - ${DB_VOLUME}:/var/lib/mysql
-      - ${DB_INIT_VOLUME}:/docker-entrypoint-initdb.d
-    # Override the entrypoint in this way if you need to change the root password
-    # N.B.: after this you can just login wiht root / <empty password>
-    # entrypoint: mysqld_safe --skip-grant-tables --user=mysql
-
-  # The keycloak instance will contains all the information to introduce SSO and MFA
-  # in the whole stack.
-  code-iam:
-    container_name: ${IAM_CONTAINER_NAME}
-    image: ${IAM_IMAGE}
-    command: start-dev
-    environment:
-      NO_PROXY: ${NO_PROXY}
-      HTTP_PROXY: ${HTTP_PROXY}
-      HTTPS_PROXY: ${HTTPS_PROXY}
-      KC_LOG: console
-      KC_LOG_LEVEL: info
-      KC_PROXY: passthrough
-      KC_HOSTNAME_PATH: /iam
-      KC_HTTP_RELATIVE_PATH: /iam
-      KC_HOSTNAME_STRICT: "false"
-      KC_PROXY_HEADERS: xforwarded
-      KC_PROXY_ADDRESS_FORWARDING: "true"
-      KEYCLOAK_ADMIN: ${IAM_MGMT_USERNAME}
-      KEYCLOAK_ADMIN_PASSWORD: ${IAM_MGMT_PASSWORD}
-      KC_HOSTNAME_URL: https://${HOSTNAME}.${DOMAIN}/iam
-      KC_HOSTNAME_ADMIN_URL: https://${HOSTNAME}.${DOMAIN}/iam
-      KC_DB: mariadb
-      KC_DB_URL: jdbc:mariadb://code-db:3306/iam?characterEncoding=UTF-8
-      KC_DB_USERNAME: ${IAM_DB_USERNAME}
-      KC_DB_PASSWORD: ${IAM_DB_PASSWORD}
-    volumes:
-      - ${IAM_INIT_FILE}:/opt/keycloak/data/import/realm-init.json:ro
-    networks:
-      - tracker
       - code-space
-    links:
-      - code-db:code-db
-      - code-cache:code-cache
+    environment:
+      - AUTHZ_CONFIG_PATH=/config/authz.yaml
+      - OAUTH2_PROXY_URL=http://oauth2-proxy:4180
+    volumes:
+      - ./config/authz:/config:ro
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.code-iam.tls=true"
-      - "traefik.http.routers.code-iam.entrypoints=websecure"
-      - "traefik.http.routers.code-iam.tls.certresolver=myresolver"
-      - "traefik.http.routers.code-iam.rule=Host(`${HOSTNAME}.${DOMAIN}`) && PathPrefix(`/iam`)"
-      - "traefik.http.services.code-iam.loadbalancer.server.port=8080"
+      # Internal route for health checks (optional, for debugging)
+      - "traefik.http.routers.authz-service.tls=true"
+      - "traefik.http.routers.authz-service.entrypoints=websecure"
+      - "traefik.http.routers.authz-service.tls.certresolver=myresolver"
+      - "traefik.http.routers.authz-service.rule=Host(`${HOSTNAME}.${DOMAIN}`) && PathPrefix(`/authz`)"
+      - "traefik.http.services.authz-service.loadbalancer.server.port=3000"
+      # ForwardAuth middleware definition (used by protected services)
+      - "traefik.http.middlewares.authz.forwardauth.address=http://authz-service:3000/auth"
+      - "traefik.http.middlewares.authz.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.authz.forwardauth.authResponseHeaders=X-Auth-User,X-Auth-Email"
     depends_on:
-      - code-db
-    dns: ${DNS_HOST}
-    restart: always
+      - oauth2-proxy
 
-  # This is the work tracker software
-  code-tracker:
-    container_name: ${TRACKER_CONTAINER_NAME}
-    image: ${TRACKER_IMAGE}
+  # Portal - Landing page and user dashboard
+  portal:
+    build:
+      context: ./containers_build/portal
+    container_name: portal
     restart: always
-    environment:
-      NO_PROXY: ${NO_PROXY}
-      HTTP_PROXY: ${HTTP_PROXY}
-      HTTPS_PROXY: ${HTTPS_PROXY}
-      LEAN_DEBUG: ${TRACKER_DEBUG}
-      LEAN_APP_URL: https://${HOSTNAME}.${DOMAIN}
-      LEAN_APP_DIR: ${TRACKER_APP_DIR}
-      LEAN_SITENAME: ${TRACKER_SITENAME}
-      LEAN_DB_HOST: ${TRACKER_DB_HOST}
-      LEAN_DB_USER: ${DB_USER}
-      LEAN_DB_PASSWORD: ${DB_PASS}
-      LEAN_DB_DATABASE: ${DB_NAME}
-      LEAN_DEFAULT_TIMEZONE: ${TRACKER_DEFAULT_TIMEZONE}
-      LEAN_SESSION_SECURE: ${TRACKER_SESSION_SECURE}
-      LEAN_SESSION_PASSWORD: ${TRACKER_SESSION_PASSWORD}
-      LEAN_SESSION_EXPIRATION: ${TRACKER_SESSION_EXPIRATION}
-      LEAN_EMAIL_USE_SMTP: ${SMTP_ENABLE}
-      LEAN_EMAIL_RETURN: ${SMTP_RCPT}
-      LEAN_EMAIL_SMTP_HOSTS: ${SMTP_HOST}
-      LEAN_EMAIL_SMTP_AUTH: ${SMTP_AUTH}
-      LEAN_EMAIL_SMTP_USERNAME: ${SMTP_USER}
-      LEAN_EMAIL_SMTP_PASSWORD: ${SMTP_PASS}
-      LEAN_EMAIL_SMTP_AUTO_TLS: ${SMTP_AUTO_TLS}
-      LEAN_EMAIL_SMTP_SECURE: ${SMTP_SECURE}
-      LEAN_EMAIL_SMTP_SSLNOVERIFY: ${SMTP_SSLNOVERIFY}
-      LEAN_EMAIL_SMTP_PORT: ${SMTP_PORT}
     networks:
-      - tracker
       - code-space
-    volumes:
-      - ${TRACKER_USER_VOLUME}:/var/www/html/public/userfiles
-      - ${TRACKER_PUBLIC_VOLUME}:/var/www/html/userfiles
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf -o /dev/null http://localhost || exit 1"]
-      interval: 20s
-      timeout: 10s
-      retries: 3
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.code-tracker.tls=true"
-      - "traefik.http.routers.code-tracker.entrypoints=websecure"
-      - "traefik.http.routers.code-tracker.tls.certresolver=myresolver"
-      - "traefik.http.routers.code-tracker.rule=Host(`${HOSTNAME}.${DOMAIN}`) && PathPrefix(`/`)"
-      - "traefik.http.services.code-tracker.loadbalancer.server.port=80"
-    links:
-      - code-db:code-db
-      - code-cache:code-cache
+      - "traefik.http.routers.portal.tls=true"
+      - "traefik.http.routers.portal.entrypoints=websecure"
+      - "traefik.http.routers.portal.tls.certresolver=myresolver"
+      # Lowest priority - catch-all for root path
+      - "traefik.http.routers.portal.priority=1"
+      - "traefik.http.routers.portal.rule=Host(`${HOSTNAME}.${DOMAIN}`)"
+      - "traefik.http.services.portal.loadbalancer.server.port=3000"
     depends_on:
-      - code-db
+      - oauth2-proxy
 
   # This is an end user reserved database
   code-db-app:
@@ -206,8 +138,6 @@ services:
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASS}
-    ports:
-      - "${DB_APP_PORT}:3306"
     networks:
       code-space:
         aliases:
@@ -215,38 +145,12 @@ services:
     volumes:
       - ${DB_APP_VOLUME}:/var/lib/mysql
 
-  # This is an end user database UI manager
-  code-db-admin:
-    container_name: ${DB_ADMIN_CONTAINER_NAME}
-    image: ${DB_ADMIN_IMAGE}
-    restart: always
-    ports:
-      - "${DB_ADMIN_PORT}:80"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.code-db-admin.tls=true"
-      - "traefik.http.routers.code-db-admin.entrypoints=websecure"
-      - "traefik.http.routers.code-db-admin.tls.certresolver=myresolver"
-      - "traefik.http.services.code-db-admin.loadbalancer.server.port=80"
-      - "traefik.http.middlewares.code-db-admin.stripprefix.prefixes=/dbm"
-      - "traefik.http.routers.code-db-admin.rule=Host(`${HOSTNAME}.${DOMAIN}`) && PathPrefix(`/dbm`)"
-    networks:
-      - code-space
-    links:
-      - code-db-app:db
-    depends_on:
-      - code-db-app
-    environment:
-      - PMA_ARBITRARY=1
-
   # This is an end user reserved redis service
   code-cache:
     container_name: ${CACHE_CONTAINER_NAME}
     image: ${CACHE_IMAGE}
     command: redis-server --save 20 1 --loglevel warning --requirepass ${CACHE_PASS}
     restart: always
-    ports:
-      - "${CACHE_PORT}:6379"
     networks:
       code-space:
         aliases:
@@ -254,22 +158,7 @@ services:
     volumes:
       - ${CACHE_VOLUME}:/data
 
-  # A container that exposes an API to show its IP address
-  code-whoami:
-    container_name: code-whoami
-    image: traefik/whoami
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.code-whoami.tls=true"
-      - "traefik.http.routers.code-whoami.entrypoints=websecure"
-      - "traefik.http.routers.code-whoami.tls.certresolver=myresolver"
-      - "traefik.http.services.code-whoami.loadbalancer.server.port=80"
-      - "traefik.http.middlewares.code-whoami.stripprefix.prefixes=/whoami"
-      - "traefik.http.middlewares.code-whoami-headers.headers.customrequestheaders.X-Original-Url=/whoami"
-      - "traefik.http.routers.code-whoami.rule=Host(`${HOSTNAME}.${DOMAIN}`) && PathPrefix(`/whoami`)"
-      - "traefik.http.routers.code-whoami.middlewares=code-whoami-headers@docker,forward-auth@docker"
-
-  # This container is ment to reastart all unhealthy containers
+  # This container is meant to restart all unhealthy containers
   autoheal:
     container_name: code-autoheal
     image: willfarrell/autoheal:latest
@@ -281,3 +170,4 @@ services:
       - AUTOHEAL_DEFAULT_STOP_TIMEOUT=10
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+

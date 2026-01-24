@@ -9,6 +9,10 @@ ARG APT_PROXY
 ENV APT_PROXY $APT_PROXY
 ENV HTTP_PROXY $HTTP_PROXY
 ENV HTTPS_PROXY $HTTPS_PROXY
+
+# Set extensions gallery to the public marketplace
+ENV EXTENSIONS_GALLERY '{"serviceUrl": "https://marketplace.visualstudio.com/_apis/public/gallery", "itemUrl": "https://marketplace.visualstudio.com/items"}'
+
 RUN if [ ! -z "$APT_PROXY" ]; then echo "Acquire::http::Proxy \"${APT_PROXY}\";" > /etc/apt/apt.conf.d/02proxy ; fi
 
 # Update and install some basic packages to register a PPA.
@@ -33,6 +37,10 @@ RUN curl -s https://api.github.com/repos/coder/code-server/releases/latest | gre
 # Install Anthropic Claude
 RUN npm install -g @anthropic-ai/claude-code
 RUN npm install -g npm-pack-all
+
+# Install Code Server Github CoPilot extensions
+RUN /usr/bin/code-server --install-extension github.copilot \
+    /usr/bin/code-server --install-extension github.copilot-chat
 
 # Copy needed binary files
 COPY ./bin/looper.sh /usr/local/bin/looper.sh
