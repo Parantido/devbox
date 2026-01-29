@@ -18,13 +18,13 @@ const WORKSPACES: Workspace[] = [
   {
     name: 'Danilo',
     path: '/code/danilo/',
-    description: 'Personal development workspace',
+    description: 'Danilo development workspace',
   },
   {
     name: 'Dropinc',
     path: '/code/dropinc/',
-    description: 'Dropinc project workspace',
-  },
+    description: 'Dropinc development workspace',
+  }
 ]
 
 function GitHubIcon() {

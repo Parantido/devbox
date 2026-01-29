@@ -14,15 +14,15 @@
       - HTTPS_PROXY=${HTTPS_PROXY}
       - DEFAULT_WORKSPACE=/config/workspace
       - BASE_HREF=/code/{{USERNAME}}/proxy/4200/
+      - EXTENSIONS_GALLERY={"serviceUrl":"https://marketplace.visualstudio.com/_apis/public/gallery","itemUrl":"https://marketplace.visualstudio.com/items"}
     networks:
       - code-space
     links:
       - code-db-app:code-db
       - code-cache:code-cache
     volumes:
-      - /root/Docker/code-server/mounts/config/{{USERNAME}}:/config
-      - /root/Docker/code-server/mounts/shared:/shared
-      - /etc/letsencrypt:/var/run/certs
+      - ./mounts/config/{{USERNAME}}:/config
+      - ./mounts/shared:/shared
     healthcheck:
       test: ["CMD-SHELL", "curl -sf -o /dev/null http://localhost:8443 || exit 1"]
       interval: 20s
