@@ -19,11 +19,6 @@ const WORKSPACES: Workspace[] = [
     name: 'Danilo',
     path: '/code/danilo/',
     description: 'Danilo development workspace',
-  },
-  {
-    name: 'Dropinc',
-    path: '/code/dropinc/',
-    description: 'Dropinc development workspace',
   }
 ]
 
