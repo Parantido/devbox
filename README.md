@@ -39,17 +39,6 @@
   - Per-resource access control
   - User and group-based permissions
   - YAML-based configuration (no database required)
-* Live Tracker (Powered with [LeanTime.io](https://leantime.io)) for:
-  - Projects Management
-  - Milestone Arrangement
-  - ToDo Kanban / Table / List
-  - Goals set
-  - Ideas share
-  - Knowledge base management (Wiki/MarkDown)
-  - Blueprints & Templates
-  - Timesheet and Hours Accounting
-  - Reports
-  - Retrospective management
 * MySQL Database for Backend Tools
 * MySQL Database for Developers already linked in each dev space
 * Redis Server for Developers already linked in each dev space
@@ -68,7 +57,7 @@
 - ✅ ~~Keycloak IAM/SSO~~ Replaced with lightweight OAuth2 Proxy
 - ✅ GitHub OAuth Integration
 - ✅ YAML-based Authorization Service
-- ❌ LDAP integration
+- ❌ ~~LDAP Integration~~ I'm not planning to introduce this anymore
 
 ## How To Use
 
