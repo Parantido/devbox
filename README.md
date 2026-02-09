@@ -118,26 +118,26 @@ DevBox uses a two-layer authentication and authorization system:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              User Request                                    │
-│                          GET /code/danilo                                    │
+│                              User Request                                   │
+│                          GET /code/danilo                                   │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                               Traefik                                        │
-│                         (Reverse Proxy)                                      │
-│                                                                              │
+│                               Traefik                                       │
+│                         (Reverse Proxy)                                     │
+│                                                                             │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │                    ForwardAuth Middleware                            │    │
-│  │                   → authz-service:3000/auth                          │    │
+│  │                    ForwardAuth Middleware                           │    │
+│  │                   → authz-service:3000/auth                         │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                          Authorization Service                               │
-│                                                                              │
-│   1. Extract session cookie from request                                     │
+│                          Authorization Service                              │
+│                                                                             │
+│   1. Extract session cookie from request                                    │
 │   2. Validate session with OAuth2 Proxy (/oauth2/userinfo)                  │
 │   3. If no session → Redirect to GitHub login                               │
 │   4. If session valid → Check authorization in authz.yaml                   │
@@ -149,11 +149,11 @@ DevBox uses a two-layer authentication and authorization system:
 ┌───────────────────────────────┐       ┌───────────────────────────────────┐
 │       OAuth2 Proxy            │       │         authz.yaml                │
 │                               │       │                                   │
-│  → Redirect to GitHub         │       │  Check: Is user "danilo.gh"      │
+│  → Redirect to GitHub         │       │  Check: Is user "danilo.gh"       │
 │  → Handle callback            │       │  allowed to access /code/danilo?  │
 │  → Set session cookie         │       │                                   │
-│  → Redirect back to resource  │       │  ✓ Yes → 200 (proceed)           │
-└───────────────────────────────┘       │  ✗ No  → 403 (forbidden)         │
+│  → Redirect back to resource  │       │  ✓ Yes → 200 (proceed)            │
+└───────────────────────────────┘       │  ✗ No  → 403 (forbidden)          │
                                         └───────────────────────────────────┘
 ```
 
