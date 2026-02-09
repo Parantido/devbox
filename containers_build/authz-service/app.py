@@ -9,7 +9,7 @@ This service works in conjunction with OAuth2 Proxy to provide:
 import os
 import logging
 import fnmatch
-from urllib.parse import urlencode, quote
+from urllib.parse import urlencode, quote, urlparse
 
 import yaml
 import requests
@@ -202,8 +202,11 @@ def auth():
 
     logger.info(f"User authenticated: {username} ({email})")
 
+    # Strip query string before matching resources
+    auth_path = urlparse(original_uri).path
+
     # Check authorization
-    authorized, reason = is_user_authorized(username, original_uri, config)
+    authorized, reason = is_user_authorized(username, auth_path, config)
 
     if authorized:
         logger.info(f"Access granted: {username} -> {original_uri} ({reason})")
